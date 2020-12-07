@@ -798,29 +798,29 @@ static FUNCTION_CACHE *find_func_cache( int target ) {
 		//	Note last record we saw.
 		//
 		last = ptr;
+		adrs = &( ptr->next );
 	}
 	//
 	//	Nothing found, so we re-use the oldest record in the list.
 	//	Start by unlinking it from the end of the list.
 	//
-	ptr = last;
 	*( last->prev ) = NULL;
 	//
 	//	Replace with new target and empty function settings.
 	//
-	ptr->target = target;
-	for( byte i = 0; i < FUNCTION_BIT_ARRAY; ptr->bits[ i++ ] = 0 );
+	last->target = target;
+	for( byte i = 0; i < FUNCTION_BIT_ARRAY; last->bits[ i++ ] = 0 );
 	//
 	//	Link onto head of cache.
 	//
-	ptr->next = function_cache;
-	function_cache->prev = &( ptr->next );
-	function_cache = ptr;
-	ptr->prev = &function_cache;
+	last->next = function_cache;
+	function_cache->prev = &( last->next );
+	function_cache = last;
+	last->prev = &function_cache;
 	//
 	//	Done.
 	//
-	return( ptr );
+	return( last );
 }
 
 //
@@ -3194,7 +3194,7 @@ static byte compose_verify_cv_bit( byte *command, int cv, int bnum, int value ) 
 	//		STATE:	1=Confirmed, 0=Failed
 	//
 	//	Verify CV bit value (Programming track)
-	//	-------------------------------------
+	//	---------------------------------------
 	//
 	//	Compare the specified CV bit with the supplied
 	//	value, if they are the same, return 1, otherwise
