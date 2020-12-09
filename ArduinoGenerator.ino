@@ -3788,7 +3788,7 @@ static void scan_line( char *buf ) {
 						if(( byte1 & 0b11110000 ) != 0b10110000 ) {
 							if(( byte1 & 0b11110000 ) != 0b10100000 ) {
 								if(( byte1 & 0b11100000 ) != 0b10000000 ) {
-									report_error( INVALID_BYTE_VALUE, cmd );
+									report_error( INVALID_FUNC_NUMBER, cmd );
 									break;
 								}
 							}
