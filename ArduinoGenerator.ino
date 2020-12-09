@@ -2229,8 +2229,7 @@ static void monitor_current_load( int amps ) {
 	//
 	//	Now we believe we are safe we can assess the new data passed in.
 	//
-	//	Pull out the long term average figure, and compound in the
-	//	new figure.
+	//	Compound in the new figure.
 	//
 	for( byte i = 0; i < COMPOUNDED_VALUES; i++ ) {
 		amps = ( load_compound_value[ i ] = ( amps + load_compound_value[ i ]) >> 1 );
