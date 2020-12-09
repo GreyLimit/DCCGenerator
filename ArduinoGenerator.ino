@@ -2452,13 +2452,24 @@ static void link_buffer_chain( void ) {
 //	if at the exact point of modification, they are in the other
 //	set of buffers.
 //
+//	There is an extremely small possibility that the signal ISR will
+//	read one of these addresses "as it is being modified", and subsequently
+//	pick up the wrong address.  It is a small risk but the table
+//	extends across multiple page boundaries (256 byte sections), and so
+//	the addresses differ in both the MSB and LSB.  To protect against this
+//	possibility the assignments need to be bracketed between cli() and sei().
+//
+//	These routines are only called when one or other track is being power up.
+//
 static void link_main_buffers( void ) {
 	//
 	//	This routine is called to shape the circular buffers
 	//	to only contain the operating track buffers.
 	//
+	cli();
 	circular_buffer[ PROGRAMMING_BASE_BUFFER-1 ].next = circular_buffer;
 	circular_buffer[ TRANSMISSION_BUFFERS-1 ].next = circular_buffer;
+	sei();
 }
 
 #ifndef DCC_PLUS_PLUS_COMPATIBILITY
@@ -2468,8 +2479,10 @@ static void link_prog_buffers( void ) {
 	//	This routine is called to shape the circular buffers
 	//	to only contain the programming track buffer.
 	//
+	cli();
 	circular_buffer[ PROGRAMMING_BASE_BUFFER-1 ].next = circular_buffer + PROGRAMMING_BASE_BUFFER;
 	circular_buffer[ TRANSMISSION_BUFFERS-1 ].next = circular_buffer + PROGRAMMING_BASE_BUFFER;
+	sei();
 }
 
 #endif
@@ -2674,7 +2687,7 @@ static char *parse_number( char *buf, bool *found, int *value ) {
 //	Define a routine which scans the input text and returns the
 //	command character and a series of numeric arguments
 //
-//	Routine return number of arguments (after the command).
+//	Routine returns the number of arguments (after the command).
 //
 static int parse_input( char *buf, char *cmd, int *arg, int max ) {
 	int	args,
@@ -3716,8 +3729,8 @@ static void scan_line( char *buf ) {
 #endif
 
 			//
-			//	Mobile decode functions
-			//	-----------------------
+			//	Mobile decoder functions
+			//	------------------------
 			//
 #ifdef DCC_PLUS_PLUS_COMPATIBILITY
 			case 'f': {
@@ -3758,13 +3771,29 @@ static void scan_line( char *buf ) {
 					report_error( INVALID_ADDRESS, target );
 					break;
 				}
-				if(( byte1 < 0 )||( byte1 > 255 )) {
-					report_error( INVALID_BYTE_VALUE, byte1 );
-					break;
-				}
-				if(( args == 3 )&&(( byte2 < 0 )||( byte2 > 255 ))) {
-					report_error( INVALID_BYTE_VALUE, byte2 );
-					break;
+				//
+				//	To sanity check the byte values provided we only need to ensure
+				//	that byte 1 is one of a set of formats:
+				//
+				//	Only validate as one of (checked off in this order):
+				//
+				//		11011110 
+				//		11011111
+				//		1011????
+				//		1010????
+				//		100?????
+				//
+				if( byte1 != 0b11011110 ) {
+					if( byte1 != 0b11011111 ) {
+						if(( byte1 & 0b11110000 ) != 0b10110000 ) {
+							if(( byte1 & 0b11110000 ) != 0b10100000 ) {
+								if(( byte1 & 0b11100000 ) != 0b10000000 ) {
+									report_error( INVALID_BYTE_VALUE, cmd );
+									break;
+								}
+							}
+						}
+					}
 				}
 				//
 				//	Find a destination buffer
@@ -3791,10 +3820,7 @@ static void scan_line( char *buf ) {
 					len = 1;
 				}
 				//
-				//	There is no "build" of the packet, the data provided is simply
-				//	copied into the DCC packet.  This is a potential cause for
-				//	trouble effectively allowing the host computer software the
-				//	ability to compose its own DCC packets.
+				//	Fill in the payload of the DCC packet.
 				//
 				command[ len++ ] = byte1;
 				if( args == 3 ) command[ len++ ] = byte2;
