@@ -1,11 +1,8 @@
 # DCCGenerator
+
 Firmware for an Arduino UNO and motor shield to generate an NMRA DCC signal for operating a model railway
 
-For the moment, simply reading the source code shuld provide an insight into what this is and how it does it.
-
-I will come back to this and extend the descritpion.
-
-
+For the moment, simply reading the source code should provide an insight into what this is and how it does it.
 
 ## DCC Plus Plus Command Summary
 
@@ -37,10 +34,12 @@ Set speed and direction of an engine fitted with a mobile decoder.
     <t BUFFER ADRS SPEED DIR>
 
 Where:
+
 - BUFFER:	An internal buffer number, from 1 through to MOBILE_TRANS_BUFFERS
 - ADRS:	The short (1-127) or long (128-10239) address of the engine decoder
 - SPEED:	Throttle speed from 0-126, or -1 for emergency stop
 - DIR:	1=forward, 0=reverse
+
 Returns:
 
     <T BUFFER SPEED DIRECTION>
@@ -56,6 +55,7 @@ Where:
 - SSSSSSS:	Speed; 0=stop, 1=emergency stop, or target speed
 
 ### Modify Engine Function F0-F28
+
 Activate/Deactivate function within a mobile decoder.    
 
     <f ADRS BYTE1 [BYTE2]>
@@ -98,9 +98,11 @@ DCC Packet format:
     <a ADRS SUBADRS STATE>
     
 Where:
+
 - ADRS:	The primary address of the decoder (0-511)
 - SUBADRS:The sub-address of the decoder (0-3)
 - STATE:	1=on (set), 0=off (clear)
+
 Returns: Nothing
 
 DCC Packet format:
@@ -139,6 +141,7 @@ Even in "compatibility" mode, the firmware will still send back error reports, t
 
         <# ERR ARG>
 Where:
+
 - ERR: Firmware specific numeric value indicating error detected
 - ARG: Error specific additional information
 
@@ -175,7 +178,7 @@ ASSERT_FAILED|99|Firmware condition assertion failed (arg provides firmware sour
 ## DCC Generator Command Summary
 
 For the moment the following commands are described in outline
-only; details to be provided.
+only; more details to be provided, eventually.
 
 Serial port configured to 38400 baud.
 
