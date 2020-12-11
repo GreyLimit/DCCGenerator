@@ -175,10 +175,10 @@
 
 //
 //	Define the absolute current limit value (0-1023) at which
-//	the power is removed from the track.
+//	the power is removed from the track (current spike).
 //
 //	The average current limit is the maximum difference in
-//	current and average reading allowed before a spike condition
+//	current and average reading allowed before a overload condition
 //	is declared
 //
 #define INSTANT_CURRENT_LIMIT	750
@@ -2187,10 +2187,21 @@ bool	load_confirmed;
 //
 static void monitor_current_load( int amps ) {
 
+#ifdef DEBUG_POWER_MONITOR
+	Serial.print( "AMPS=" );
+	Serial.println( amps );
+#endif
+
 	//
-	//	First and immediate task: Is there a power spike?
+	//	Compound in the new figure.
 	//
-	if( amps > INSTANT_CURRENT_LIMIT ) {
+	for( byte i = 0; i < COMPOUNDED_VALUES; i++ ) {
+		amps = ( load_compound_value[ i ] = ( amps + load_compound_value[ i ]) >> 1 );
+	}
+	//
+	//	Is there a power spike?
+	//
+	if( load_compound_value[ 1 ] > INSTANT_CURRENT_LIMIT ) {
 		//
 		//	No question - cut the power now.
 		//
@@ -2214,7 +2225,7 @@ static void monitor_current_load( int amps ) {
 	//
 	//	Has there been a big enough jump compared a short term average?
 	//
-	if( load_compound_value[ COMPOUNDED_VALUES >> 1 ] > AVERAGE_CURRENT_LIMIT ) {
+	if( load_compound_value[ COMPOUNDED_VALUES - 1 ] > AVERAGE_CURRENT_LIMIT ) {
 		//
 		//	Cut the power here because there is some sort of long
 		//	time higher power drain.
@@ -2226,15 +2237,6 @@ static void monitor_current_load( int amps ) {
 		}
 		return;
 	}
-	//
-	//	Now we believe we are safe we can assess the new data passed in.
-	//
-	//	Compound in the new figure.
-	//
-	for( byte i = 0; i < COMPOUNDED_VALUES; i++ ) {
-		amps = ( load_compound_value[ i ] = ( amps + load_compound_value[ i ]) >> 1 );
-	}
-	//
 	//	We now assess if there has been a "jump" in the current draw
 	//	which would indicate a confirmation signal being sent back
 	//	from an attached decoder.
