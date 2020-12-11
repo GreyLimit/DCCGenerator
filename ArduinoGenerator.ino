@@ -1391,7 +1391,7 @@ static void queue_bit_buffer( TRANS_BUFFER *ptr ) {
 //	Global variables used to interact with the ADC interrupt service routine.
 //
 static volatile int	track_load_reading;
-static volatile boolean	reading_is_ready;
+static volatile bool	reading_is_ready;
 
 //
 //	Macro generating code to restart the ADC process.  These could now
