@@ -52,7 +52,7 @@ Where:
 
 - A:		Address data.
 - D:		Direction; 1=forwards, 0=backwards.
-- SSSSSSS:	Speed; 0=stop, 1=emergency stop, or target speed
+- SSSSSSS:	Speed; 0=stop, 1=emergency stop, or target speed+1
 
 ### Modify Engine Function F0-F28
 
