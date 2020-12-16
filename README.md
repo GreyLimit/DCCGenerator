@@ -169,7 +169,7 @@ INVALID_BYTE_VALUE|16|Invalid byte value (valid from 0 to 255)
 INVALID_WORD_VALUE|17|Invalid word value (valid from 0 to 32767)
 COMMAND_REPORT_FAIL|18|Firmware unable to send command report back to host computer
 TRANSMISSION_BUSY|19|Firmware unable to locate empty transmisionn buffer for requested DCC command
-COMMAND_QUEUE_FAILED|20|Firmware unable to queu pending DCC command (all pending buffers in use)
+COMMAND_QUEUE_FAILED|20|Firmware unable to queue pending DCC reply (all pending buffers in use).  Pending buffers are used to cature a return confirmation/status from the supplied DCC command
 POWER_NOT_OFF|21|Power transitions only allowed between OFF and another state
 POWER_OVERLOAD|22|Consistent high level power drain detected
 POWER_SPIKE|23|Instant power level reading too high (short circuit?) 
