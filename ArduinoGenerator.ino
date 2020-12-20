@@ -50,6 +50,64 @@
 //#define DCC_PLUS_PLUS_COMPATIBILITY 1
 
 //
+//	Compilation note:
+//
+//	If when compiled for a target host you get the warning
+//	about insufficient memory and potential instability issues
+//	then the simplest (safest!) way to reduce memory consumption
+//	is to reduce the number of bit buffers for each category
+//	of use.  It is possible to reduce each to 1 (though no less),
+//	but reducing the number of mobile buffers reduces the number
+//	of engines which can be operated in parallel.
+//
+//	Values are defined at approximately line 320 and currently have
+//	the following default values:
+//
+//		ACCESSORY_TRANS_BUFFERS	3
+//		MOBILE_TRANS_BUFFERS	6
+//		PROGRAMMING_BUFFERS	1
+//
+
+//
+//	To implement an I2C connected LCD display, define the
+//	following macros and values.
+//
+//	LCD_DISPLAY_ENABLE	Simple define to include required code.
+//	LCD_DISPLAY_ROWS	Number of rows display has.
+//	LCD_DISPLAY_COLS	Number of columns available per row.
+//	LCD_DISPLAY_ADRS	The I2C address of the display
+//
+//	The display is assumed to be attached using a generic
+//	PCF8575 I2C to Parallel adator.  The following default
+//	definitions apply to a generic 20x4 display.
+//
+#define LCD_DISPLAY_ENABLE
+#define LCD_DISPLAY_ROWS	4
+#define LCD_DISPLAY_COLS	20
+#define LCD_DISPLAY_ADRS	0x27
+//
+//	Define a set of single charactrer symbols to represet
+//	actions/directions applied to decoders/accessories.
+//
+#define LCD_ACTION_FORWARD	'>'
+#define LCD_ACTION_BACKWARDS	'<'
+#define LCD_ACTION_ENABLE	'^'
+#define LCD_ACTION_DISABLE	'v'
+
+//
+//	Finally, on LCDs..
+//
+//	From a wiring perspective (apart from +Vcc and Ground) the
+//	display is attached to the arduino via the pass-through pins
+//	D18/A4 and D19/A5 on the motor shield.  These equate to
+//	the I2C/TWI interface pins SDA (D18) and SCL (D19).
+//
+//	To keep memory allocation to a minimum (at least on the basic
+//	Arduino UNO) the "Lite" version of the Wire, TWI and LCD_I2C
+//	libraries are required (found with this code).
+//
+
+//
 //	Bring in the necessary IO and Interrupt definitions.
 //
 #include <avr/io.h>
@@ -60,6 +118,17 @@
 //
 #include <avr/pgmspace.h>
 
+#ifdef LCD_DISPLAY_ENABLE
+
+//
+//	LCD Display libraries.
+//
+#include "TWI_Lite.h"
+#include "Wire_Lite.h"
+#include "LCD_I2C_Lite.h"
+
+#endif
+
 //
 //	General universal constants.
 //
@@ -68,6 +137,9 @@
 #define EOS	'\0'
 #define SPACE	' '
 #define HASH	'#'
+#define MINUS	'-'
+#define PLUS	'+'
+#define DELETE	'\177'
 #define ERROR	(-1)
 
 //
@@ -252,7 +324,7 @@
 //		A+M .. A+M+P-1	Programming track buffers.
 //
 #define ACCESSORY_TRANS_BUFFERS	3
-#define MOBILE_TRANS_BUFFERS	8
+#define MOBILE_TRANS_BUFFERS	6
 #define PROGRAMMING_BUFFERS	1
 
 //
@@ -501,6 +573,56 @@ static void report_error( int err, int arg );
 //	...or not.
 //
 #define ASSERT(v)
+
+#endif
+
+//
+//	LCD structure
+//	-------------
+//
+#ifdef LCD_DISPLAY_ENABLE
+
+//
+//	Create the LCD interface object.
+//
+static LCD_I2C_Lite lcd( LCD_DISPLAY_ADRS, LCD_DISPLAY_COLS, LCD_DISPLAY_ROWS );
+
+//
+//	Outline description of the  LCD display
+//	---------------------------------------
+//
+//	The dimentions and field sizes for the display are set here as they
+//	have size implications for other data structures following.
+//
+//	The code will *attempt* to be compile time sensitive to the
+//	dimensions of the display (as set in LCD_DISPLAY_ROWS and _COLS)
+//	This may not result in a pleasing/balanced display in all cases.
+//
+//	The code has been organised to target a 20 column by 4 row display.
+//
+//	A "drawing" of the target output display:
+//
+//	+--------------------+	The STATUS area of the display, showing:
+//	|SSSSSS              |	The power (L)oad average
+//	|SSSSSS              |	The available (F)ree bit buffers and (P)ower status
+//	|SSSSSS              |	DCC packets (T)ransmitted sent per second
+//	|SSSSSS              |	The (U)ptime in seconds
+//	+--------------------+	
+//
+//	+--------------------+	The BUFFER area of the display, showing:
+//	|      BBBBBBBBBBBBBB|	Buffers in use and the action in place.
+//	|      BBBBBBBBBBBBBB|
+//	|      BBBBBBBBBBBBBB|
+//	|      BBBBBBBBBBBBBB|
+//	+--------------------+	
+//
+//	The following definitions define some parameters which
+//	shape the output ot the LCD.
+//
+#define LCD_DISPLAY_STATUS_WIDTH	6
+#define LCD_DISPLAY_BUFFER_WIDTH	7
+#define LCD_DISPLAY_BUFFER_COLS		((LCD_DISPLAY_COLS-LCD_DISPLAY_STATUS_WIDTH)/LCD_DISPLAY_BUFFER_WIDTH)
+
 
 #endif
 
@@ -832,7 +954,6 @@ static bool update_function( int target, byte func, bool state ) {
 	FUNCTION_CACHE	*ptr;
 	byte		i, b; 
 
-	ASSERT( func >= MIN_FUNCTION_NUMBER );
 	ASSERT( func <= MAX_FUNCTION_NUMBER );
 
 	ptr = find_func_cache( target );
@@ -869,7 +990,6 @@ static byte get_function( int target, byte func, byte val ) {
 	FUNCTION_CACHE	*ptr;
 	byte		i, b; 
 
-	ASSERT( func >= MIN_FUNCTION_NUMBER );
 	ASSERT( func <= MAX_FUNCTION_NUMBER );
 
 	ptr = find_func_cache( target );
@@ -1156,6 +1276,15 @@ TRANS_BUFFER {
 	//
 	byte	reply;
 	char	contains[ MAXIMUM_DCC_REPLY ];
+	
+#ifdef LCD_DISPLAY_ENABLE
+	//
+	//	Liquid Crystal Display Data
+	//	---------------------------
+	//
+	char	display[ LCD_DISPLAY_BUFFER_WIDTH ];
+#endif
+
 	//
 	//	Buffer linkage.
 	//	---------------
@@ -1173,10 +1302,14 @@ TRANS_BUFFER {
 //	has been compiled in.
 //
 
+#if defined( DEBUG_STATISTICS )| defined( LCD_DISPLAY_ENABLE )
+
+static int	statistic_packets;
+
+#endif
 #ifdef DEBUG_STATISTICS
 
-static int	statistic_packets,
-		statistic_power;
+static int	statistic_power;
 static long	statistic_looping;	// This value grows too fast for an int.
 
 #endif
@@ -1294,6 +1427,63 @@ static char *int_to_text( char *buf, int v ) {
 	while( c ) *buf++ = '0' + r[ --c ];
 	return( buf );
 }
+
+#ifdef LCD_DISPLAY_ENABLE
+
+//
+//	This "back fill" integer to text routine is used only
+//	by the LCD update routine.  Returns true if everything
+//	fits, false otherwise
+//
+static bool backfill_int_to_text( char *buf, int v, byte len ) {
+	bool	n;	// Negative flag.
+
+	ASSERT( buf != NULL );
+	ASSERT( len > 0 );
+
+	//
+	//	Cut out the "0" case as it need special handling.
+	//
+	if( v ) {
+		//
+		//	Prepare for handling negative number
+		//
+		if(( n = ( v < 0 ))) v = -v;
+		//
+		//	loop round pealing off the digits
+		//
+		while( len-- ) {
+			buf[ len ] = '0' + ( v % 10 );
+			if(!( v /= 10 )) break;
+		}
+		//
+		//	If v is not zero, or if len is zero and
+		//	the negative flag is set, then we cannot
+		//	fit the data into the available space.
+		//
+		if( v ||( n && ( len < 1 ))) return( false );
+		//
+		//	Insert negative symbol if required.
+		//
+		if( n ) buf[ --len ] = '-';
+	}
+	else {
+		//
+		//	Zero case easy to handle.
+		//
+		buf[ --len ] = '0';
+	}
+	//
+	//	Space pad rest of buffer
+	//
+	while( len-- ) buf[ len ] = SPACE;
+	//
+	//	Done!
+	//
+	return( true );
+}
+
+#endif
 
 //
 //	Define routines to assist with debugging that output
@@ -1531,7 +1721,7 @@ static byte dcc_filler_data[] = {
 
 
 //
-//	The interrupt routine.
+//	The Interrupt Service Routine which generate the DCC signal.
 //
 ISR( TIMER2_COMPA_vect ) {
 	//
@@ -1596,11 +1786,13 @@ ISR( TIMER2_COMPA_vect ) {
 					//
 					current = current->next;
 
-#ifdef DEBUG_STATISTICS
+#if defined( DEBUG_STATISTICS )| defined( LCD_DISPLAY_ENABLE )
+
 					//
 					//	Count a successful packet transmission
 					//
 					statistic_packets++;
+
 #endif
 
 					//
@@ -1706,7 +1898,7 @@ ISR( TIMER2_COMPA_vect ) {
 //
 //	Returns true on success, false otherwise.
 //
-static byte pack_command( byte *cmd, byte clen, bool long_preamble, byte *buf ) {
+static bool pack_command( byte *cmd, byte clen, bool long_preamble, byte *buf ) {
 	byte	l, b, c, v, s;
 
 #ifdef DEBUG_BIT_SLICER
@@ -2169,12 +2361,12 @@ static byte power_off_tracks( void ) {
 //
 //	This is the array of compounded average values.
 //
-int	load_compound_value[ COMPOUNDED_VALUES ];
+static int	load_compound_value[ COMPOUNDED_VALUES ];
 //
 //	Finally, this is the flag set if the power code
 //	spots a confirmation signal in the power consumption.
 //
-bool	load_confirmed;
+static bool	load_confirmed;
 
 //
 //	This routine is called every time track electrical load data
@@ -2228,7 +2420,7 @@ static void monitor_current_load( int amps ) {
 	if( load_compound_value[ COMPOUNDED_VALUES - 1 ] > AVERAGE_CURRENT_LIMIT ) {
 		//
 		//	Cut the power here because there is some sort of long
-		//	time higher power drain.
+		//	term higher power drain.
 		//
 		if( power_off_tracks()) {
 			report_error( POWER_OVERLOAD, amps );
@@ -2436,6 +2628,18 @@ static void link_buffer_chain( void ) {
 		circular_buffer[ i ].duration = 0;
 		circular_buffer[ i ].bits[ 0 ] = 0;
 		circular_buffer[ i ].pending = NULL;
+
+#ifdef LCD_DISPLAY_ENABLE
+		//
+		//	Not really necesary but ensures all buffers
+		//	contain something displayable even if it has
+		//	not been explicity set.
+		//
+		memset( circular_buffer[ i ].display, '_', LCD_DISPLAY_BUFFER_WIDTH );
+		circular_buffer[ i ].display[ 0 ] = '[';
+		circular_buffer[ i ].display[ LCD_DISPLAY_BUFFER_WIDTH-1 ] = ']';	
+#endif
+
 	}
 	//
 	//	Link up all the buffers into a loop in numerical order.
@@ -2608,7 +2812,227 @@ void setup( void ) {
 	//	Kick of the power management system.
 	//
 	MONITOR_ANALOGUE_PIN( MAIN_TRACK_ANALOGUE );
+
+	//
+	//	Optional hardware initialisations
+	//
+
+	//
+	//	LCD Display.
+	//	------------
+	//
+	//	This might be a warm restart for the display,
+	//	so reset everything to a clean slate.
+	//
+
+#ifdef LCD_DISPLAY_ENABLE
+
+	Wire.begin();
+	lcd.begin();
+	lcd.backlight( true );
+	lcd.clear();
+
+#endif
 }
+
+#ifdef LCD_DISPLAY_ENABLE
+
+//
+//	Liquid Crystal Display
+//	======================
+//
+//	Update the LCD with pertinent data about the operation of the
+//	DCC Generator.
+//
+
+#include "mul_div.h"
+
+//
+//	Time of previous call to display update (ms).
+//
+static unsigned long last_lcd_update = 0;
+
+//
+//	Update routine.
+//
+static void display_lcd_updates( unsigned long now ) {
+	unsigned int	delta,		// Milli-Seconds between calls
+			uptime,		// Minutes system has been up
+			pps;		// DCC Packets per second.
+
+	char		buffer[ LCD_DISPLAY_STATUS_WIDTH ];
+
+	//
+	//	store the seconds uptime.
+	//
+	uptime = now / 1000;
+	//
+	//	Establish the time since we last ran the
+	//	LCD update funciton
+	//
+	delta = (unsigned int)( now - last_lcd_update );
+	last_lcd_update = now;
+	//
+	//	Calculate the packets per second rate.
+	//
+	pps = mul_div( statistic_packets, 1000, delta );
+	//
+	//	Output the STATUS column data in the following order:
+	//
+	//	+--------------------+	The STATUS area of the display, showing:
+	//	|SSSSSS              |	The power (L)oad average
+	//	|SSSSSS              |	The available (F)ree bit buffers and (P)ower status
+	//	|SSSSSS              |	DCC packets (T)ransmitted sent per second
+	//	|SSSSSS              |	The (U)ptime in seconds
+	//	+--------------------+
+	//
+	//	The code will a visual bounary at the far right of the status
+	//	area to create a visual break between the status and buffer areas.
+	//
+	buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_ALT( '|', ':' );
+	//
+	//	Now complete each of the rows in LCD_DISPLAY_STATUS_WIDTH-1 characters.
+	//
+	{
+		//
+		//	Row 0, always available, Power Load Average
+		//
+		buffer[ 0 ] = 'L';
+		if( !backfill_int_to_text( buffer+1, load_compound_value[ COMPOUNDED_VALUES-1 ], LCD_DISPLAY_STATUS_WIDTH-2 )) {
+			memset( buffer+1, HASH, LCD_DISPLAY_STATUS_WIDTH-2 );
+		}
+		lcd.position( 0, 0 );
+		lcd.write( buffer, LCD_DISPLAY_STATUS_WIDTH );
+	}
+#if LCD_DISPLAY_ROWS > 1
+	{
+		byte	c;
+
+		//
+		//	Row 1, (F)ree bit buffers and (P)ower status
+		//
+		c = 0;
+		for( byte i = 0; i < TRANSMISSION_BUFFERS; i++ ) {
+			if( circular_buffer[ i ].state == TBS_EMPTY ) {
+				c++;
+			}
+		}
+		buffer[ 0 ] = 'P';
+		switch( global_power_state ) {
+			case GLOBAL_POWER_OFF: {
+				buffer[ 1 ] = '0';
+				break;
+			}
+			case GLOBAL_POWER_MAIN: {
+				buffer[ 1 ] = '1';
+				break;
+			}
+			case GLOBAL_POWER_PROG: {
+				buffer[ 1 ] = '2';
+				break;
+			}
+			default: {
+				buffer[ 1 ] = HASH;
+				break;
+			}
+		}
+		buffer[ 2 ] = 'F';
+		if( !backfill_int_to_text( buffer+3, c, LCD_DISPLAY_STATUS_WIDTH-4 )) {
+			memset( buffer+3, HASH, LCD_DISPLAY_STATUS_WIDTH-4 );
+		}
+		lcd.position( 0, 1 );
+		lcd.write( buffer, LCD_DISPLAY_STATUS_WIDTH );
+	}
+#endif
+#if LCD_DISPLAY_ROWS > 2
+	{
+		//
+		//	Row 2, DCC packets (T)ransmitted sent per second
+		//
+		buffer[ 0 ] = 'T';
+		if( !backfill_int_to_text( buffer+1, pps, LCD_DISPLAY_STATUS_WIDTH-2 )) {
+			memset( buffer+1, HASH, LCD_DISPLAY_STATUS_WIDTH-2 );
+		}
+		lcd.position( 0, 2 );
+		lcd.write( buffer, LCD_DISPLAY_STATUS_WIDTH );
+	}
+#endif
+#if LCD_DISPLAY_ROWS > 3
+	{
+		//
+		//	Row 3, The (U)ptime in seconds
+		//
+		buffer[ 0 ] = 'U';
+		if( uptime < 1000 ) {
+			//
+			//	Display time in seconds.
+			//
+			(void)backfill_int_to_text( buffer+1, uptime, LCD_DISPLAY_STATUS_WIDTH-3 );
+			buffer[ LCD_DISPLAY_STATUS_WIDTH-2 ] = 's';
+		}
+		else {
+			if(( uptime /= 60 ) < 1000 ) {
+				//
+				//	Display time in minutes.
+				//
+				(void)backfill_int_to_text( buffer+1, uptime, LCD_DISPLAY_STATUS_WIDTH-3 );
+				buffer[ LCD_DISPLAY_STATUS_WIDTH-2 ] = 'm';
+			}
+			else {
+				//
+				//	Display time in HOURS!
+				//
+				uptime /= 60;
+				(void)backfill_int_to_text( buffer+1, uptime, LCD_DISPLAY_STATUS_WIDTH-3 );
+				buffer[ LCD_DISPLAY_STATUS_WIDTH-2 ] = 'h';
+			}
+		}
+		lcd.position( 0, 3 );
+		lcd.write( buffer, LCD_DISPLAY_STATUS_WIDTH );
+	}
+#endif
+	//
+	//	+--------------------+	The BUFFER area of the display, showing:
+	//	|      BBBBBBBBBBBBBB|	Buffers in use and the action in place.
+	//	|      BBBBBBBBBBBBBB|	This area is broken up into as many one
+	//	|      BBBBBBBBBBBBBB|	line areas as will fit.  Each area is
+	//	|      BBBBBBBBBBBBBB|	LCD_DISPLAY_BUFFER_WIDTH bytes wide.
+	//	+--------------------+	
+	//
+	{
+		byte	r, c;
+
+		r = 0;
+		c = 0;
+		for( byte i = 0; i < TRANSMISSION_BUFFERS; i++ ) {
+			if( circular_buffer[ i ].state == TBS_RUN ) {
+				lcd.position( LCD_DISPLAY_STATUS_WIDTH + c * LCD_DISPLAY_BUFFER_WIDTH, r );
+				if(( r += 1 ) >= LCD_DISPLAY_ROWS ) {
+					r = 0;
+					if(( c += 1 ) >= LCD_DISPLAY_BUFFER_COLS ) {
+						break;
+					}
+				}
+				lcd.write( circular_buffer[ i ].display, LCD_DISPLAY_BUFFER_WIDTH );
+			}
+		}
+		//
+		//	Clear out remaining spaces.
+		//
+		while( c < LCD_DISPLAY_BUFFER_COLS ) {
+			while( r < LCD_DISPLAY_ROWS ) {
+				lcd.position( LCD_DISPLAY_STATUS_WIDTH + c * LCD_DISPLAY_BUFFER_WIDTH, r );
+				lcd.fill( SPACE, LCD_DISPLAY_BUFFER_WIDTH );
+				r++;
+			}
+			r = 0;
+			c++;
+		}
+	}
+	//ZZ//
+}
+
+#endif
 
 //
 //	Input Processing routines
@@ -2627,7 +3051,7 @@ void setup( void ) {
 //	o	The firmware coded in this sketch is unable to
 //		implement some of the higher level primitives
 //		that the DCCpp firmware supports.  These commands are
-//		not genuine DCC primitive operations but synthesized
+//		not direct DCC primitive operations but synthesized
 //		actions which can be implemented within the host computer
 //		software.
 //
@@ -2639,6 +3063,7 @@ void setup( void ) {
 //	Having said that, in high level terms, both protocols have
 //	basically the same structure.
 //
+
 //
 //	Define simple "in string" number parsing routine.  This
 //	effectively does the bulk of the syntax parsing for the
@@ -2699,10 +3124,6 @@ static int parse_input( char *buf, char *cmd, int *arg, int max ) {
 	ASSERT( max > 0 );
 
 	//
-	//	Do some simplistic syntax verification
-	//
-	if( *buf++ != PROT_IN_CHAR ) return( ERROR );
-	//
 	//	Copy out the command character and verify
 	//
 	*cmd  = *buf++;
@@ -2721,10 +3142,8 @@ static int parse_input( char *buf, char *cmd, int *arg, int max ) {
 		}
 	}
 	//
-	//	Run out of arguments, buf should point to the
-	//	end of command character
+	//	Done.
 	//
-	if( *buf != PROT_OUT_CHAR ) return( ERROR );
 	return( args );
 }
 
@@ -2736,7 +3155,7 @@ static TRANS_BUFFER *find_available_buffer( byte base, byte count, int target ) 
 	byte		i;
 	TRANS_BUFFER	*b;
 
-	ASSERT(( base >= 0 )&&( base < TRANSMISSION_BUFFERS ));
+	ASSERT( base < TRANSMISSION_BUFFERS );
 	ASSERT(( count > 0 )&&( count <= TRANSMISSION_BUFFERS ));
 	ASSERT(( base + count ) <= TRANSMISSION_BUFFERS );
 	
@@ -3002,6 +3421,266 @@ static byte compose_verify_cv_bit( byte *command, int cv, int bnum, int value ) 
 
 #endif
 
+//
+//	Liquid Crystal Display summaries
+//	================================
+
+#ifdef LCD_DISPLAY_ENABLE
+
+#if LCD_DISPLAY_BUFFER_WIDTH < 4
+	//
+	//	If there is not enough space for anything.
+	//	This is really a coding error.
+	//
+#	error "LCD_DISPLAY_BUFFER_WIDTH set too small"
+#endif
+
+//
+//	The following routines provide the mechanism for filling
+//	out the display data for buffers that will be shown on the
+//	attached LCD.
+//
+
+//
+//	Summarise the motion command for an mobile decoder
+//
+static void lcd_summary_motion( char *buffer, int target, int speed, int dir ) {
+	//
+	//	Fill in the target number.
+	//
+	if( !backfill_int_to_text( buffer, target, 4 )) {
+		memset( buffer, HASH, 4 );
+	}
+
+#if LCD_DISPLAY_BUFFER_WIDTH >= 5
+	//
+	//	The direction
+	//
+	buffer[ 4 ] = dir? LCD_ACTION_FORWARD: LCD_ACTION_BACKWARDS;
+#endif
+
+#if LCD_DISPLAY_BUFFER_WIDTH >= 7
+	//
+	//	Finally the speed.
+	//
+	if( !backfill_int_to_text( buffer + 5, speed, 2 )) memset( buffer + 5, HASH, 2 );
+#endif
+
+#if LCD_DISPLAY_BUFFER_WIDTH > 7
+	//
+	//	Space fill the tail area
+	//
+	memset( buffer + 7, SPACE, LCD_DISPLAY_BUFFER_WIDTH - 7 );
+#endif
+
+}
+
+//
+//	Summarise an action upon an accessory
+//
+static void lcd_summary_accessory( char *buffer, int adrs, int subadrs, int state ) {
+	//
+	//	Place Accessory main address.
+	//
+	(void)backfill_int_to_text( buffer, adrs, 3 );
+
+#if LCD_DISPLAY_BUFFER_WIDTH >= 5
+	//
+	//	Place sub address.
+	//
+	buffer[ 3 ] = '/';
+	(void)backfill_int_to_text( buffer + 4, subadrs, 1 );
+#endif
+
+#if LCD_DISPLAY_BUFFER_WIDTH >= 7
+	//
+	//	Place action applied.
+	//
+	buffer[ 5 ] = state? LCD_ACTION_ENABLE: LCD_ACTION_DISABLE;
+	buffer[ 6 ] = SPACE;
+#endif
+
+#if LCD_DISPLAY_BUFFER_WIDTH > 7
+	//
+	//	Space fill the tail area
+	//
+	memset( buffer + 7, SPACE, LCD_DISPLAY_BUFFER_WIDTH - 7 );
+#endif
+
+}
+
+#ifdef DCC_PLUS_PLUS_COMPATIBILITY
+
+//
+//	DDC Generator Compatibility Command LCD summary routines.
+//	---------------------------------------------------------
+//
+
+//
+//	Summarise function application to a target
+//
+static void lcd_summary_function( char *buffer, int target ) {
+	//
+	//	Fill in the target number.
+	//
+	if( !backfill_int_to_text( buffer, target, 4 )) {
+		memset( buffer, HASH, 4 );
+	}
+
+#if LCD_DISPLAY_BUFFER_WIDTH >= 5
+	//
+	//	The actions taken
+	//
+	buffer[ 4 ] = 'A';
+#endif
+
+#if LCD_DISPLAY_BUFFER_WIDTH > 5
+	//
+	//	Space fill the tail area.
+	//
+	memset( buffer + 5, SPACE, LCD_DISPLAY_BUFFER_WIDTH - 5 );
+#endif
+
+}
+
+#else
+
+//
+//	DDC Generator Native Command LCD summary routines.
+//	--------------------------------------------------
+//
+
+//
+//	Summarise function application to a target
+//
+static void lcd_summary_function( char *buffer, int target, int func, int state ) {
+	//
+	//	Fill in the target number.
+	//
+	if( !backfill_int_to_text( buffer, target, 4 )) {
+		memset( buffer, HASH, 4 );
+	}
+
+#if LCD_DISPLAY_BUFFER_WIDTH >= 5
+	//
+	//	The actions taken
+	//
+	buffer[ 4 ] = state? LCD_ACTION_ENABLE: LCD_ACTION_DISABLE;
+#endif
+
+#if LCD_DISPLAY_BUFFER_WIDTH >= 7
+	//
+	//	Finally function.
+	//
+	(void)backfill_int_to_text( buffer + 5, func, 2 );
+#endif
+
+#if LCD_DISPLAY_BUFFER_WIDTH > 7
+	//
+	//	Space fill the tail area
+	//
+	memset( buffer + 7, SPACE, LCD_DISPLAY_BUFFER_WIDTH - 7 );
+#endif
+}
+
+//
+//	Display setting a CV to a value.
+//
+static void lcd_summary_setcv( char *buffer, int cv, int value ) {
+	//
+	//	Fill in the CV number.
+	//
+	if( !backfill_int_to_text( buffer, cv, 3 )) {
+		memset( buffer, HASH, 3 );
+	}
+	buffer[ 3 ] = '=';
+	
+#if LCD_DISPLAY_BUFFER_WIDTH >= 7
+	//
+	//	new value.
+	//
+	(void)backfill_int_to_text( buffer + 4, value, 3 );
+#endif
+
+#if LCD_DISPLAY_BUFFER_WIDTH > 7
+	//
+	//	Space fill the tail area
+	//
+	memset( buffer + 7, SPACE, LCD_DISPLAY_BUFFER_WIDTH - 7 );
+#endif
+}
+
+//
+//	Display checking a CV against a value.
+//
+static void lcd_summary_verifycv( char *buffer, int cv, int value ) {
+	//
+	//	Fill in the CV number.
+	//
+	if( !backfill_int_to_text( buffer, cv, 3 )) {
+		memset( buffer, HASH, 3 );
+	}
+	buffer[ 3 ] = '?';
+	
+#if LCD_DISPLAY_BUFFER_WIDTH >= 7
+	//
+	//	Check value.
+	//
+	(void)backfill_int_to_text( buffer + 4, value, 3 );
+#endif
+
+#if LCD_DISPLAY_BUFFER_WIDTH > 7
+	//
+	//	Space fill the tail area
+	//
+	memset( buffer + 7, SPACE, LCD_DISPLAY_BUFFER_WIDTH - 7 );
+#endif
+}
+
+//
+//	Display reading a CV bit (against a known value).
+//
+static void lcd_summary_readcv( char *buffer, int cv, int bitno, int value ) {
+	//
+	//	Fill in the CV number.
+	//
+	if( !backfill_int_to_text( buffer, cv, 3 )) {
+		memset( buffer, HASH, 3 );
+	}
+	buffer[ 3 ] = '/';
+	
+#if LCD_DISPLAY_BUFFER_WIDTH >= 5
+	//
+	//	bit number.
+	//
+	if(( bitno >= 0 )&&( bitno <= 7 )) {
+		buffer[ 4 ] = '0' + bitno;
+	}
+	else {
+		buffer[ 4 ] = HASH;
+	}
+#endif
+
+#if LCD_DISPLAY_BUFFER_WIDTH >= 7
+	//
+	//	Check value.
+	//
+	buffer[ 5 ] = '?';
+	buffer[ 6 ] = value? '1': '0';
+#endif
+
+#if LCD_DISPLAY_BUFFER_WIDTH > 7
+	//
+	//	Space fill the tail area
+	//
+	memset( buffer + 7, SPACE, LCD_DISPLAY_BUFFER_WIDTH - 7 );
+#endif
+}
+
+#endif
+
+
+#endif
 	
 //
 //	Command Summary
@@ -3057,7 +3736,7 @@ static byte compose_verify_cv_bit( byte *command, int cv, int bnum, int value ) 
 	//	Where:
 	//		A:		Address data.
 	//		D:		Direction; 1=forwards, 0=backwards.
-	//		SSSSSSS:	Speed; 0=stop, 1=emergency stop, or target speed
+	//		SSSSSSS:	Speed; 0=stop, 1=emergency stop, or target speed+1
 	//
 	//
 	//
@@ -3478,6 +4157,14 @@ static void scan_line( char *buf ) {
 					report_error( COMMAND_QUEUE_FAILED, cmd );
 					break;
 				}
+
+#ifdef LCD_DISPLAY_ENABLE
+				//
+				//	Complete LCD summary.
+				//
+				lcd_summary_motion( buf->display, target, speed, dir );
+#endif
+
 				//
 				//	Construct the reply to send when we get send
 				//	confirmation and pass to the manager code to
@@ -3547,13 +4234,21 @@ static void scan_line( char *buf ) {
 				//
 				//	Now create and append the command to the pending list.
 				//
-				if( !create_pending_rec( &tail, target, 0, false, compose_motion_packet( command, target, speed, dir ), command )) {
+				if( !create_pending_rec( &tail, target, ((( speed == EMERGENCY_STOP )||( speed == MINIMUM_DCC_SPEED ))? TRANSIENT_COMMAND_REPEATS: 0 ), false, compose_motion_packet( command, target, speed, dir ), command )) {
 					//
 					//	Report that no pending record has been created.
 					//
 					report_error( COMMAND_QUEUE_FAILED, cmd );
 					break;
 				}
+
+#ifdef LCD_DISPLAY_ENABLE
+				//
+				//	Complete LCD summary.
+				//
+				lcd_summary_motion( buf->display, target, speed, dir );
+#endif
+
 				//
 				//	Construct the reply to send when we get send
 				//	confirmation and pass to the manager code to
@@ -3644,6 +4339,14 @@ static void scan_line( char *buf ) {
 					report_error( COMMAND_QUEUE_FAILED, cmd );
 					break;
 				}
+
+#ifdef LCD_DISPLAY_ENABLE
+				//
+				//	Complete LCD summary.
+				//
+				lcd_summary_accessory( buf->display, adrs, subadrs, state );
+#endif
+
 				//
 				//	No reply required.
 				//
@@ -3719,6 +4422,14 @@ static void scan_line( char *buf ) {
 					report_error( COMMAND_QUEUE_FAILED, cmd );
 					break;
 				}
+
+#ifdef LCD_DISPLAY_ENABLE
+				//
+				//	Complete LCD summary.
+				//
+				lcd_summary_accessory( buf->display, adrs, subadrs, state );
+#endif
+
 				//
 				//	Construct the future reply and set the state (un-negate
 				//	target value).
@@ -3836,6 +4547,14 @@ static void scan_line( char *buf ) {
 					report_error( COMMAND_QUEUE_FAILED, cmd );
 					break;
 				}
+				
+#ifdef LCD_DISPLAY_ENABLE
+				//
+				//	Reduced LCD summary as we have no idea what has been modified.
+				//
+				lcd_summary_function( buf->display, target );
+#endif
+
 				//
 				//	There is no future reply so set the state.
 				//
@@ -3908,6 +4627,14 @@ static void scan_line( char *buf ) {
 					report_error( COMMAND_QUEUE_FAILED, cmd );
 					break;
 				}
+
+#ifdef LCD_DISPLAY_ENABLE
+				//
+				//	Complete LCD summary.
+				//
+				lcd_summary_function( buf->display, target, func, state );
+#endif
+
 				//
 				//	Prepare the future reply and set new state.
 				//
@@ -3989,6 +4716,14 @@ static void scan_line( char *buf ) {
 					report_error( COMMAND_QUEUE_FAILED, cmd );
 					break;
 				}
+
+#ifdef LCD_DISPLAY_ENABLE
+				//
+				//	Complete LCD summary.
+				//
+				lcd_summary_setcv( buf->display, cv, value );
+#endif
+
 				//
 				//	Construct the future reply and set the state. Use the confirmation version
 				//	of the reply routine.
@@ -4072,6 +4807,14 @@ static void scan_line( char *buf ) {
 					report_error( COMMAND_QUEUE_FAILED, cmd );
 					break;
 				}
+
+#ifdef LCD_DISPLAY_ENABLE
+				//
+				//	Complete LCD summary.
+				//
+				lcd_summary_verifycv( buf->display, cv, value );
+#endif
+
 				//
 				//	Construct the future reply and set the state. The '#' in the reply
 				//	will be replaced by a 1 or 0 to reflect confirmation.
@@ -4167,6 +4910,14 @@ static void scan_line( char *buf ) {
 					report_error( COMMAND_QUEUE_FAILED, cmd );
 					break;
 				}
+
+#ifdef LCD_DISPLAY_ENABLE
+				//
+				//	Complete LCD summary.
+				//
+				lcd_summary_readcv( buf->display, cv, bnum, value );
+#endif
+
 				//
 				//	Construct the future reply and set the state. The '#' in the reply
 				//	will be replaced by a 1 or 0 to reflect confirmation.
@@ -4201,7 +4952,8 @@ static void scan_line( char *buf ) {
 //	The buffer:
 //
 static char serial_buf[ SERIAL_BUFFER_SIZE+1 ];
-static int serial_used = 0;
+static byte serial_used = 0;
+static bool in_cmd_packet = false;
 
 //
 //	The character input routine.
@@ -4211,24 +4963,56 @@ static void process_input( int count ) {
 		char	c;
 
 		switch(( c = Serial.read())) {
-			case NL:
-			case CR: {
+			case PROT_IN_CHAR: {
 				//
-				//	Process line and reset buffer.
-				//
-				serial_buf[ serial_used ] = EOS;
-				scan_line( serial_buf );
-				//
-				//	Now reset the buffer space.
+				//	Found the start of a command, regardless of what we thought
+				//	we were doing we clear out the buffer and start collecting
+				//	the content of the packet.
 				//
 				serial_used = 0;
+				in_cmd_packet =  true;
+				break;
+			}
+			case PROT_OUT_CHAR: {
+				//
+				//	If we got here and we were in a command packet then we have
+				//	something to work with, maybe.
+				//
+				if( in_cmd_packet ) {
+					//
+					//	Process line and reset buffer.
+					//
+					serial_buf[ serial_used ] = EOS;
+					scan_line( serial_buf );
+					//
+					//	Now reset the buffer space.
+					//
+					serial_used = 0;
+					in_cmd_packet =  false;
+				}
 				break;
 			}
 			default: {
 				//
-				//	Save character if there is space.
+				//	If we are inside a command packet then we save character, if there is space.
 				//
-				if( serial_used < SERIAL_BUFFER_SIZE ) serial_buf[ serial_used++ ] = c;
+				if( in_cmd_packet ) {
+					if(( c < SPACE )||( c >= DELETE )) {
+						//
+						//	Invalid character for a command - abandon the current command.
+						//
+						serial_used = 0;
+						in_cmd_packet =  false;
+					}
+					else {
+						//
+						//	"Valid" character (at least it is a normal character), so
+						//	save it if possible.
+						//
+						if( serial_used < SERIAL_BUFFER_SIZE-1 ) serial_buf[ serial_used++ ] = c;
+					}
+				}
+				break;
 			}
 		}
 	}
@@ -4294,9 +5078,16 @@ void loop( void ) {
 
 #ifndef DCC_PLUS_PLUS_COMPATIBILITY
 		//
-		//	Only power reports generated so far.
+		//	Forward out an asynchronous power update.
 		//
 		report_track_power();
+#endif
+
+#ifdef LCD_DISPLAY_ENABLE
+		//
+		//	Send updates to the LCD
+		//
+		display_lcd_updates( now );
 #endif
 
 #ifdef DEBUG_STATISTICS
@@ -4322,8 +5113,13 @@ void loop( void ) {
 		//	Reset those values to zero
 		//
 		statistic_looping = 0;
-		statistic_packets = 0;
 		statistic_power = 0;
+
+#endif
+#if defined( DEBUG_STATISTICS )| defined( LCD_DISPLAY_ENABLE )
+
+		statistic_packets = 0;
+
 #endif
 
 	}
