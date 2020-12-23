@@ -204,7 +204,7 @@ Serial port configured to 38400 baud.
     [F ADRS FUNC VALUE] -> [F ADRS FUNC STATE]
 
 - ADRS:	The short (1-127) or long (128-10239) address of the engine decoder
-- FUNC:	The function number to be modified (0-21)
+- FUNC:	The function number to be modified (0-28)
 - VALUE:	1=Enable, 0=Disable
 - STATE:	1=Confirmed, 0=Failed
 
