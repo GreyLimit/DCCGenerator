@@ -151,7 +151,7 @@ Symbolic name|Numeric Value|General Meaning
 -------------|-------------|---------------
 NO_ERROR|0|No error - should not be returned
 ERROR_QUEUE_OVERFLOW|1|Internal queue for catching errors pending bandwidth to return them has overflowed, the argument is the number of times
-ERROR_REPORT_FAIL|2|The firmware was unable to queue a command reponse as the output queue was full (partial reply might be sent)
+ERROR_REPORT_FAIL|2|The firmware was unable to queue a command response as the output queue was full (partial reply might be sent)
 BIT_TRANS_OVERFLOW|3|The conversion of a DCC byte level command to a bit stream format failed as the result is too big
 DCC_COMMAND_OVERFLOW|4|Contruction of a DCC byte level packet failed as the result is too big
 UNRECOGNISED_COMMAND|5|Command letter not recognised as a valid command
