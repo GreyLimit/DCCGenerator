@@ -29,7 +29,7 @@
 //	A sketch for generating the DCC signal through
 //	an Arduino motor shield.
 //
-//	Hardware required:
+//	Minimum hardware required:
 //
 //		Arduino UNO R3
 //		Arduino Motor Shield
@@ -98,9 +98,10 @@
 //	Finally, on LCDs..
 //
 //	From a wiring perspective (apart from +Vcc and Ground) the
-//	display is attached to the arduino via the pass-through pins
+//	display is attached to the Arduino Uno via the pass-through pins
 //	D18/A4 and D19/A5 on the motor shield.  These equate to
-//	the I2C/TWI interface pins SDA (D18) and SCL (D19).
+//	the I2C/TWI interface pins SDA (D18) and SCL (D19).  These will
+//	be different on other platforms.
 //
 //	To keep memory allocation to a minimum (at least on the basic
 //	Arduino UNO) the "Lite" version of the Wire, TWI and LCD_I2C
@@ -265,7 +266,7 @@
 //
 //	Define the watchdog interval in milliseconds.
 //
-#define WATCHDOG_INTERVAL	2000
+#define WATCHDOG_INTERVAL	1000
 
 //
 //	Define the maximum number of bytes in a DCC packet that we
@@ -594,7 +595,7 @@ static LCD_I2C_Lite lcd( LCD_DISPLAY_ADRS, LCD_DISPLAY_COLS, LCD_DISPLAY_ROWS );
 //	The dimentions and field sizes for the display are set here as they
 //	have size implications for other data structures following.
 //
-//	The code will *attempt* to be compile time sensitive to the
+//	The code will attempt to be compile time sensitive to the
 //	dimensions of the display (as set in LCD_DISPLAY_ROWS and _COLS)
 //	This may not result in a pleasing/balanced display in all cases.
 //
@@ -744,6 +745,7 @@ static bool create_pending_rec( PENDING_PACKET ***adrs, int target, byte duratio
 	//
 	return( true );
 }
+
 //
 //	Define a routine to release one (one=true) or all (one=false) pending packets in a list.
 //
@@ -1432,8 +1434,9 @@ static char *int_to_text( char *buf, int v ) {
 
 //
 //	This "back fill" integer to text routine is used only
-//	by the LCD update routine.  Returns true if everything
-//	fits, false otherwise
+//	by the LCD update routine.  Returns true if there was
+//	an issue with the conversion (and remedial action needs
+//	to be done) or false if everything worked as planned.
 //
 static bool backfill_int_to_text( char *buf, int v, byte len ) {
 	bool	n;	// Negative flag.
@@ -1461,7 +1464,7 @@ static bool backfill_int_to_text( char *buf, int v, byte len ) {
 		//	the negative flag is set, then we cannot
 		//	fit the data into the available space.
 		//
-		if( v ||( n && ( len < 1 ))) return( false );
+		if( v ||( n && ( len < 1 ))) return( true );
 		//
 		//	Insert negative symbol if required.
 		//
@@ -1480,7 +1483,7 @@ static bool backfill_int_to_text( char *buf, int v, byte len ) {
 	//
 	//	Done!
 	//
-	return( true );
+	return( false );
 }
 
 #endif
@@ -2857,8 +2860,7 @@ static unsigned long last_lcd_update = 0;
 //
 static void display_lcd_updates( unsigned long now ) {
 	unsigned int	delta,		// Milli-Seconds between calls
-			uptime,		// Minutes system has been up
-			pps;		// DCC Packets per second.
+			uptime;		// Minutes system has been up
 
 	char		buffer[ LCD_DISPLAY_STATUS_WIDTH ];
 
@@ -2872,10 +2874,6 @@ static void display_lcd_updates( unsigned long now ) {
 	//
 	delta = (unsigned int)( now - last_lcd_update );
 	last_lcd_update = now;
-	//
-	//	Calculate the packets per second rate.
-	//
-	pps = mul_div( statistic_packets, 1000, delta );
 	//
 	//	Output the STATUS column data in the following order:
 	//
@@ -2898,7 +2896,7 @@ static void display_lcd_updates( unsigned long now ) {
 		//	Row 0, always available, Power Load Average
 		//
 		buffer[ 0 ] = 'L';
-		if( !backfill_int_to_text( buffer+1, load_compound_value[ COMPOUNDED_VALUES-1 ], LCD_DISPLAY_STATUS_WIDTH-2 )) {
+		if( backfill_int_to_text( buffer+1, load_compound_value[ COMPOUNDED_VALUES-1 ], LCD_DISPLAY_STATUS_WIDTH-2 )) {
 			memset( buffer+1, HASH, LCD_DISPLAY_STATUS_WIDTH-2 );
 		}
 		lcd.position( 0, 0 );
@@ -2937,7 +2935,7 @@ static void display_lcd_updates( unsigned long now ) {
 			}
 		}
 		buffer[ 2 ] = 'F';
-		if( !backfill_int_to_text( buffer+3, c, LCD_DISPLAY_STATUS_WIDTH-4 )) {
+		if( backfill_int_to_text( buffer+3, c, LCD_DISPLAY_STATUS_WIDTH-4 )) {
 			memset( buffer+3, HASH, LCD_DISPLAY_STATUS_WIDTH-4 );
 		}
 		lcd.position( 0, 1 );
@@ -2950,7 +2948,7 @@ static void display_lcd_updates( unsigned long now ) {
 		//	Row 2, DCC packets (T)ransmitted sent per second
 		//
 		buffer[ 0 ] = 'T';
-		if( !backfill_int_to_text( buffer+1, pps, LCD_DISPLAY_STATUS_WIDTH-2 )) {
+		if( backfill_int_to_text( buffer+1, (int)mul_div( statistic_packets, 1000, delta ), LCD_DISPLAY_STATUS_WIDTH-2 )) {
 			memset( buffer+1, HASH, LCD_DISPLAY_STATUS_WIDTH-2 );
 		}
 		lcd.position( 0, 2 );
@@ -3448,9 +3446,7 @@ static void lcd_summary_motion( char *buffer, int target, int speed, int dir ) {
 	//
 	//	Fill in the target number.
 	//
-	if( !backfill_int_to_text( buffer, target, 4 )) {
-		memset( buffer, HASH, 4 );
-	}
+	if( backfill_int_to_text( buffer, target, 4 )) memset( buffer, HASH, 4 );
 
 #if LCD_DISPLAY_BUFFER_WIDTH >= 5
 	//
@@ -3463,7 +3459,7 @@ static void lcd_summary_motion( char *buffer, int target, int speed, int dir ) {
 	//
 	//	Finally the speed.
 	//
-	if( !backfill_int_to_text( buffer + 5, speed, 2 )) memset( buffer + 5, HASH, 2 );
+	if( backfill_int_to_text( buffer + 5, speed, 2 )) memset( buffer + 5, HASH, 2 );
 #endif
 
 #if LCD_DISPLAY_BUFFER_WIDTH > 7
@@ -3523,9 +3519,7 @@ static void lcd_summary_function( char *buffer, int target ) {
 	//
 	//	Fill in the target number.
 	//
-	if( !backfill_int_to_text( buffer, target, 4 )) {
-		memset( buffer, HASH, 4 );
-	}
+	if( backfill_int_to_text( buffer, target, 4 )) memset( buffer, HASH, 4 );
 
 #if LCD_DISPLAY_BUFFER_WIDTH >= 5
 	//
@@ -3557,9 +3551,7 @@ static void lcd_summary_function( char *buffer, int target, int func, int state 
 	//
 	//	Fill in the target number.
 	//
-	if( !backfill_int_to_text( buffer, target, 4 )) {
-		memset( buffer, HASH, 4 );
-	}
+	if( backfill_int_to_text( buffer, target, 4 )) memset( buffer, HASH, 4 );
 
 #if LCD_DISPLAY_BUFFER_WIDTH >= 5
 	//
@@ -3590,9 +3582,7 @@ static void lcd_summary_setcv( char *buffer, int cv, int value ) {
 	//
 	//	Fill in the CV number.
 	//
-	if( !backfill_int_to_text( buffer, cv, 3 )) {
-		memset( buffer, HASH, 3 );
-	}
+	if( backfill_int_to_text( buffer, cv, 3 )) memset( buffer, HASH, 3 );
 	buffer[ 3 ] = '=';
 	
 #if LCD_DISPLAY_BUFFER_WIDTH >= 7
@@ -3617,9 +3607,7 @@ static void lcd_summary_verifycv( char *buffer, int cv, int value ) {
 	//
 	//	Fill in the CV number.
 	//
-	if( !backfill_int_to_text( buffer, cv, 3 )) {
-		memset( buffer, HASH, 3 );
-	}
+	if( backfill_int_to_text( buffer, cv, 3 )) memset( buffer, HASH, 3 );
 	buffer[ 3 ] = '?';
 	
 #if LCD_DISPLAY_BUFFER_WIDTH >= 7
@@ -3644,9 +3632,7 @@ static void lcd_summary_readcv( char *buffer, int cv, int bitno, int value ) {
 	//
 	//	Fill in the CV number.
 	//
-	if( !backfill_int_to_text( buffer, cv, 3 )) {
-		memset( buffer, HASH, 3 );
-	}
+	if( backfill_int_to_text( buffer, cv, 3 )) memset( buffer, HASH, 3 );
 	buffer[ 3 ] = '/';
 	
 #if LCD_DISPLAY_BUFFER_WIDTH >= 5
