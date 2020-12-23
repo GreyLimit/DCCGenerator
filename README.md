@@ -153,20 +153,20 @@ NO_ERROR|0|No error - should not be returned
 ERROR_QUEUE_OVERFLOW|1|Internal queue for catching errors pending bandwidth to return them has overflowed, the argument is the number of times
 ERROR_REPORT_FAIL|2|The firmware was unable to queue a command response as the output queue was full (partial reply might be sent)
 BIT_TRANS_OVERFLOW|3|The conversion of a DCC byte level command to a bit stream format failed as the result is too big
-DCC_COMMAND_OVERFLOW|4|Contruction of a DCC byte level packet failed as the result is too big
+DCC_COMMAND_OVERFLOW|4|Construction of a DCC byte level packet failed as the result is too big
 UNRECOGNISED_COMMAND|5|Command letter not recognised as a valid command
 INVALID_BUFFER_NUMBER|6|Buffer number outside valid range (0..N,for N see firmware)
 INVALID_ARGUMENT_COUNT|7|Incorrect number of arguments for specified command
 INVALID_ADDRESS|8|Invalid DCC address
-INVALID_SPEED|9|Invalid speed specified (valid values -1, 0..126)
-INVALID_DIRECTION|10|Invalid direction (valid values 1, forwards, 0 backwards)
+INVALID_SPEED|9|Invalid speed specified (valid values: -1, 0..126)
+INVALID_DIRECTION|10|Invalid direction (valid values: 1 forwards, 0 backwards)
 INVALID_STATE|11|Invalid state (0 off, 1 on)
-INVALID_CV_NUMBER|12|Invalid CV number (valid values 1..1024)
-INVALID_FUNC_NUMBER|13|Invalid function number (valid values 0 to 28)
-INVALID_BIT_NUMBER|14|Invalid bit number (valid values 0 to 7)
+INVALID_CV_NUMBER|12|Invalid CV number (valid values: 1..1024)
+INVALID_FUNC_NUMBER|13|Invalid function number (valid values: 0 to 28)
+INVALID_BIT_NUMBER|14|Invalid bit number (valid values: 0 to 7)
 INVALID_BIT_VALUE|15|Invalid bit value supplied (0 or 1, obviously)
-INVALID_BYTE_VALUE|16|Invalid byte value (valid from 0 to 255)
-INVALID_WORD_VALUE|17|Invalid word value (valid from 0 to 32767)
+INVALID_BYTE_VALUE|16|Invalid byte value (valid values: 0 to 255)
+INVALID_WORD_VALUE|17|Invalid word value (valid values: 0 to 32767)
 COMMAND_REPORT_FAIL|18|Firmware unable to send command report back to host computer
 TRANSMISSION_BUSY|19|Firmware unable to locate empty transmisionn buffer for requested DCC command
 COMMAND_QUEUE_FAILED|20|Firmware unable to queue pending DCC reply (all pending buffers in use).  Pending buffers are used to capture a return confirmation/status from the supplied DCC command
