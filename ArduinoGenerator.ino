@@ -21,7 +21,7 @@
 ///	You should have received a copy of the GNU General Public License
 ///	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ///
- 
+
 //
 //	Arduino DCC Generator
 //	=====================
@@ -31,7 +31,7 @@
 //
 //	Minimum hardware required:
 //
-//		Arduino UNO R3
+//		Arduino UNO R3 (or Mega 2560)
 //		Arduino Motor Shield
 //		15 volt DC power supply
 //
@@ -44,8 +44,11 @@
 //
 //	You should define DCC_PLUS_PLUS_COMPATIBILITY.
 //
-//	If not defined then a similar, though different, more
-//	extensive and consistent set of commands are defined.
+//	This will only enable main track commands, no programming
+//	track commands can be processed.
+//
+//	If not defined then the default set of commands are defined
+//	including a set of programming track commands.
 //
 //#define DCC_PLUS_PLUS_COMPATIBILITY 1
 
@@ -60,12 +63,32 @@
 //	but reducing the number of mobile buffers reduces the number
 //	of engines which can be operated in parallel.
 //
-//	Values are defined at approximately line 320 and currently have
+//	Values are defined at approximately line 350 and currently have
 //	the following default values:
 //
 //		ACCESSORY_TRANS_BUFFERS	3
 //		MOBILE_TRANS_BUFFERS	6
 //		PROGRAMMING_BUFFERS	1
+//
+//	Do not change PROGRAMMING_BUFFERS from 1, it will stop the
+//	programming track working due the the extended "multi-packet"
+//	timing and sequential packet structure that programming a DCC
+//	decoder requires.
+//
+
+//
+//	Source Code note:
+//
+//	I realise that this source code is now too big as a single file,
+//	and that it needs to be broken down into a number of modules
+//	each focused on an element of the firmwares function.
+//
+//	I plan to do this.
+//
+//	However, at the moment, this is operational but not yet completely
+//	debugged (after conversion to support districts), and so breaking
+//	this source up will happen once a level of stability and reliability
+//	has been observed.
 //
 
 //
@@ -73,7 +96,7 @@
 //	following macros and values.
 //
 //	LCD_DISPLAY_ENABLE	Simple define to include required code.
-//	LCD_DISPLAY_ROWS	Number of rows display has.
+//	LCD_DISPLAY_ROWS	Number of rows the display has.
 //	LCD_DISPLAY_COLS	Number of columns available per row.
 //	LCD_DISPLAY_ADRS	The I2C address of the display
 //
@@ -87,7 +110,8 @@
 #define LCD_DISPLAY_ADRS	0x27
 //
 //	Define a set of single charactrer symbols to represet
-//	actions/directions applied to decoders/accessories.
+//	actions/directions applied to decoders/accessories when
+//	displayed on the LCD.
 //
 #define LCD_ACTION_FORWARD	'>'
 #define LCD_ACTION_BACKWARDS	'<'
@@ -98,14 +122,18 @@
 //	Finally, on LCDs..
 //
 //	From a wiring perspective (apart from +Vcc and Ground) the
-//	display is attached to the Arduino Uno via the pass-through pins
+//	display is attached to the Arduino Uno* via the pass-through pins
 //	D18/A4 and D19/A5 on the motor shield.  These equate to
 //	the I2C/TWI interface pins SDA (D18) and SCL (D19).  These will
 //	be different on other platforms.
 //
 //	To keep memory allocation to a minimum (at least on the basic
-//	Arduino UNO) the "Lite" version of the Wire, TWI and LCD_I2C
+//	Arduino UNO) these "Lite" version of the Wire, TWI and LCD_I2C
 //	libraries are required (found with this code).
+//
+//	*/ Arduino Mega uses different pins: D20/SDA and D21/SCL.  These
+//	are outside the footprint of a standard motor shield and need to
+//	picked up directly from the Mega itself.
 //
 
 //
@@ -151,7 +179,7 @@
 
 //
 //	Debugging options
-//	-----------------
+//	=================
 //
 //	Define any of the following macros to optionally include
 //	at compile time additional code to output status and data
@@ -190,9 +218,6 @@
 //#define DEBUG_BUFFER_TABLE	1
 
 //
-//	Verification Code
-//	-----------------
-//
 //	Define the macros ASSERT_VERIFICATION to include some software
 //	verification code in the firmware.  In the event of conformance
 //	checks failing errors will be produced.
@@ -201,7 +226,7 @@
 
 //
 //	Compatibility Support
-//	---------------------
+//	=====================
 //
 //	Used where "whole code" substitution would make the code
 //	unnecessarily obscure.  "a" for native mode, "b" for
@@ -225,9 +250,6 @@
 #define PROT_OUT_CHAR		SELECT_ALT( ']', '>' )
 
 //
-//	Serial Communications.
-//	----------------------
-//
 //	Define the Speed and buffer size used when accessing the
 //	serial port.
 //
@@ -240,7 +262,7 @@
 
 //
 //	High Level Configuration values.
-//	--------------------------------
+//	================================
 //
 //	These definitions alter operational elements
 //	of the solution, but not the functional aspects.
@@ -267,6 +289,14 @@
 //	Define the watchdog interval in milliseconds.
 //
 #define WATCHDOG_INTERVAL	1000
+
+//
+//	Define the Driver/District reset period (in milliseconds)
+//	This is the duration through which an individual driver is
+//	disabled as a result of a power exception (spike/overload)
+//	before a restart is attempted.
+//
+#define DRIVER_RESET_PERIOD	5000
 
 //
 //	Define the maximum number of bytes in a DCC packet that we
@@ -342,7 +372,7 @@
 //	This is a composition of the number of buffer allocated
 //	to each section.
 //
-#define TRANSMISSION_BUFFERS	(PROGRAMMING_BASE_BUFFER+PROGRAMMING_BUFFERS)
+#define TRANSMISSION_BUFFERS	(ACCESSORY_TRANS_BUFFERS+MOBILE_TRANS_BUFFERS+PROGRAMMING_BUFFERS)
 
 //
 //	Define the number of "1"s transmitted by the firmware
@@ -403,84 +433,264 @@
 
 //
 //	Motor Shield definitions.
-//	-------------------------
+//	=========================
 //
-//	Hardware characteristics of the "Deek-Robot" Motor
-//	Shield, which should be compatible with the Arduino
-//	version (and others).
+//	This DCC Generator firmware now supports multiple DCC
+//	Districts in addition to an noptional programming track.
 //
-//	A and B drivers available, each with 4 pins allocated.
+//	This create a selection of coding, performance and optimisation
+//	challenges which are all closely related to the type and
+//	configuration of the Motor Shield installed upon the Arduino.
+//
+//	The following defintions provide the higher level guidance
+//	to the source code allowing alternative methods and
+//	optimisations to be selected as permitted by the installed
+//	motor shield.
+//
+//	SHIELD_OUTPUT_DRIVERS	This is set to the number of independent
+//				H-Bridge driver circuits which the
+//				motor shield contains.
+//
+//	SHIELD_PORT_DIRECT	Define this with the port name of the
+//				pin register that contains all of the
+//				direction pins to enable code which accesses
+//				the port directly.
+//
+//	Note:	Enabling SHIELD_PORT_DIRECT code will only work for shields
+//		where all direction function pins are all grouped within a
+//		single pin register.  It is also a requirement that this
+//		register is not used for any other functions.
+//
+//	The configuration of the motor shield is captured using the following
+//	structure definition which should be stored in the Arduino program
+//	memory.
+//
+//	Where a brake pin is not available (specifically on the bespoke DCC
+//	arduino shield) use BRAKE_NOT_AVAILABLE as its pin value.  This will
+//	prevent the firmware from trying to force the pin LOW to make the
+//	pin safe.
+//
+#define SHIELD_DRIVER struct shield_driver
+SHIELD_DRIVER {
+	bool		main;		// True if this is an operational
+					// track driver, false if it is the
+					// programming track.
+	byte		direction,	// Which pin controls the polarity
+					// of the output.  When SHIELD_PORT_DIRECT
+					// is defined this becomes the binary
+					// mask of the bit in that port that
+					// controls the direction for this
+					// driver (ie bit 3 == 0b00001000)
+					// The "bit()" can be used to simplify
+					// this definition process.
+			enable,		// Which pin is used to enable the
+					// output from the driver.
+			brake,		// Pin to clear on startup.
+			load,		// Pin to read driver loading from.
+			analogue;	// Same pin as above but numerically
+					// suitable for use with setting up
+					// the asynchronous ADC interrupt.
+};
+#define BRAKE_NOT_AVAILABLE 255
+
+//
+//	Set one of the following definitions to
+//	select the motor shield installed.
+//
+//	SHIELD_DEFAULT_ARDUINO	The standard (or compatible) motor shield
+//				available widly from Areduino or other
+//				vendors.
+//
+//	SHIELD_GENERATOR_DRIVER	The bespoke shield built specifically to
+//				support multiple (>2) DCC Districts with
+//				pin register optimised specification.
+//
+#define SHIELD_DEFAULT_ARDUINO
+//#define SHIELD_GENERATOR_DRIVER
+
+//
+//	Arduino Motor Shield
+//	--------------------
+//
+#ifdef SHIELD_DEFAULT_ARDUINO
+
+//
+//	The following definitions are based on the hardware
+//	characteristics of the "Deek-Robot" Motor Shield, which
+//	should be compatible with the Arduino version (and others).
+//
+#define SHIELD_OUTPUT_DRIVERS	2
+//
+//	A and B drivers available, with 4 pins allocated to each.
 //
 //	These are the pin numbers "as per the motor shield".
 //
-//	The "_ANALOGUE" values are the numerical part of the
-//	preceding "_LOAD" pin numbers, and are required as
-//	part of the interrupts driven current monitoring. 
-//
 //	IMPORTANT:
 //
-//		You *must* cut the VIN CONNECT and BRAKE A
-//		and B traces on the back of the Motor Shield.
-//		You will need to power the shield separately
-//		from the Arduino with 15 volts DC, and leaving
-//		the VIN CONNECT in place *will* put 15 volts
-//		across the Arduino and cook it.
+//		You *must* cut the VIN CONNECT traces on the
+//		back of the Motor Shield.  You will need to
+//		power the shield separately from the Arduino
+//		with 15 volts DC, and leaving the VIN CONNECT
+//		in place will put 15 volts across the Arduino
+//		and probably damage it.
 //
-//		The BRAKE feature (for both A and B H-Bridges)
-//		is a system for deliberately shorting the
-//		output of an H-Bridge to cause a rapid
-//		stop of a DC electric motor.  Since we are
-//		not directly driving electric motors these too
-//		should be cut.
+//		Previous versions of this firmware (and the DCC++
+//		firmware) also required that the BRAKE feature
+//		(for both A and B H-Bridges) should be cut too.
+//		This is no longer required as this firmware
+//		explicitly sets these LOW and are not touched
+//		after that.
 //
-//		This firmware requires no additional jumpers
-//		for its intended operation.
+//		Also (unlike the DCC++ firmware) this firmware
+//		requires no additional jumpers for its intended
+//		operation.
 //
 #define SHIELD_DRIVER_A_DIRECTION	12
-#define SHIELD_DRIVER_A_INPUT		3
+#define SHIELD_DRIVER_A_ENABLE		3
 #define SHIELD_DRIVER_A_BRAKE		9
 #define SHIELD_DRIVER_A_LOAD		A0
 #define SHIELD_DRIVER_A_ANALOGUE	0
 
 #define SHIELD_DRIVER_B_DIRECTION	13
-#define SHIELD_DRIVER_B_INPUT		11
+#define SHIELD_DRIVER_B_ENABLE		11
 #define SHIELD_DRIVER_B_BRAKE		8
 #define SHIELD_DRIVER_B_LOAD		A1
 #define SHIELD_DRIVER_B_ANALOGUE	1
 
 //
-//	Define the physical pins linking this firmware to the
-//	motor shield attached to the Arduino.  This is where
-//	you can choose which H-Bridge to associate with the
-//	"main" track and the "programming" track.
+//	Define the motor shield attached to the Arduino for
+//	the firmware.
 //
-//	The "Direction" pins are used to create the Square
-//	Wave format of the electrical signal (as per the DCC
-//	specification).  The "Enable" pin provide a complete
-//	On/Off capability.
+static const SHIELD_DRIVER shield_output[ SHIELD_OUTPUT_DRIVERS ] PROGMEM = {
+	{
+		//
+		//	Main track.
+		//
+		true,
+		SHIELD_DRIVER_A_DIRECTION,
+		SHIELD_DRIVER_A_ENABLE,
+		SHIELD_DRIVER_A_BRAKE,
+		SHIELD_DRIVER_A_LOAD, SHIELD_DRIVER_A_ANALOGUE
+	},
+	{
+		//
+		//	Programming track
+		//
+		false,
+		SHIELD_DRIVER_B_DIRECTION,
+		SHIELD_DRIVER_B_ENABLE,
+		SHIELD_DRIVER_B_BRAKE,
+		SHIELD_DRIVER_B_LOAD, SHIELD_DRIVER_B_ANALOGUE
+	}
+};
+
+#else
+
 //
-//	The "load" pins are read as an analogue value (between
-//	0 and 1023) and represent (in some fashion) the amps/load
-//	passing through the respective H-Bridge.
+//	Arduino Generator Shield
+//	------------------------
 //
-//	As stated above, the "analogue" pins represent an
-//	alternative reference to the load pins.
+#ifdef SHIELD_GENERATOR_DRIVER
+
+//	Bespoke, hand built, motor shield specifically for DCC
+//	train operation.
 //
-#define MAIN_TRACK_DIRECTION	SHIELD_DRIVER_A_DIRECTION
-#define MAIN_TRACK_ENABLE	SHIELD_DRIVER_A_INPUT
-#define MAIN_TRACK_BRAKE	SHIELD_DRIVER_A_BRAKE
-#define MAIN_TRACK_LOAD		SHIELD_DRIVER_A_LOAD
-#define MAIN_TRACK_ANALOGUE	SHIELD_DRIVER_A_ANALOGUE
+//	While this card has not yet been prototyped, the following
+//	definitions will apply to it:
 //
-#define PROG_TRACK_DIRECTION	SHIELD_DRIVER_B_DIRECTION
-#define PROG_TRACK_ENABLE	SHIELD_DRIVER_B_INPUT
-#define PROG_TRACK_BRAKE	SHIELD_DRIVER_B_BRAKE
-#define PROG_TRACK_LOAD		SHIELD_DRIVER_B_LOAD
-#define PROG_TRACK_ANALOGUE	SHIELD_DRIVER_B_ANALOGUE
+#define SHIELD_OUTPUT_DRIVERS		4
+//#define SHIELD_OUTPUT_DRIVERS		6
+#define SHIELD_PORT_DIRECT		PORTB
+//
+#define SHIELD_DRIVER_1_DIRECTION	bit(0)
+#define SHIELD_DRIVER_1_ENABLE		2
+#define SHIELD_DRIVER_1_LOAD		A0
+#define SHIELD_DRIVER_1_ANALOGUE	0
+//
+#define SHIELD_DRIVER_2_DIRECTION	bit(1)
+#define SHIELD_DRIVER_2_ENABLE		3
+#define SHIELD_DRIVER_2_LOAD		A1
+#define SHIELD_DRIVER_2_ANALOGUE	1
+//
+#define SHIELD_DRIVER_3_DIRECTION	bit(2)
+#define SHIELD_DRIVER_3_ENABLE		4
+#define SHIELD_DRIVER_3_LOAD		A2
+#define SHIELD_DRIVER_3_ANALOGUE	2
+//
+#define SHIELD_DRIVER_4_DIRECTION	bit(3)
+#define SHIELD_DRIVER_4_ENABLE		5
+#define SHIELD_DRIVER_4_LOAD		A3
+#define SHIELD_DRIVER_4_ANALOGUE	3
+//
+//	Possible extension of bespoke board to three H-Bridge ICs.
+//
+//#define SHIELD_DRIVER_5_DIRECTION	bit(4)
+//#define SHIELD_DRIVER_5_ENABLE		6
+//#define SHIELD_DRIVER_5_LOAD		A4
+//#define SHIELD_DRIVER_5_ANALOGUE	4
+//
+//#define SHIELD_DRIVER_6_DIRECTION	bit(5)
+//#define SHIELD_DRIVER_6_ENABLE		7
+//#define SHIELD_DRIVER_6_LOAD		A5
+//#define SHIELD_DRIVER_6_ANALOGUE	5
+//
+static const SHIELD_DRIVER shield_output[ SHIELD_OUTPUT_DRIVERS ] PROGMEM = {
+	{
+		//
+		//	Main track district 1
+		//
+		true,
+		SHIELD_DRIVER_1_DIRECTION,
+		SHIELD_DRIVER_1_ENABLE,
+		BRAKE_NOT_AVAILABLE,
+		SHIELD_DRIVER_1_LOAD, SHIELD_DRIVER_1_ANALOGUE
+	},
+	{
+		//
+		//	Main track district 2
+		//
+		true,
+		SHIELD_DRIVER_2_DIRECTION,
+		SHIELD_DRIVER_2_ENABLE,
+		BRAKE_NOT_AVAILABLE,
+		SHIELD_DRIVER_2_LOAD, SHIELD_DRIVER_2_ANALOGUE
+	},
+	{
+		//
+		//	Main track district 3
+		//
+		true,
+		SHIELD_DRIVER_3_DIRECTION,
+		SHIELD_DRIVER_3_ENABLE,
+		BRAKE_NOT_AVAILABLE,
+		SHIELD_DRIVER_3_LOAD, SHIELD_DRIVER_3_ANALOGUE
+	},
+	{
+		//
+		//	Programming track
+		//
+		false,
+		SHIELD_DRIVER_4_DIRECTION,
+		SHIELD_DRIVER_4_ENABLE,
+		BRAKE_NOT_AVAILABLE,
+		SHIELD_DRIVER_4_LOAD, SHIELD_DRIVER_4_ANALOGUE
+	}
+};
+
+#else
+
+//
+//	No motor shield board selected.
+//
+#error "Not motor shield board type selected."
+
+#endif
+#endif
+
 
 //
 //	Timing, Protocol and Data definitions.
-//	--------------------------------------
+//	======================================
 //
 
 //
@@ -502,7 +712,7 @@
 //
 
 //
-//	This macro defines the number of Clock Cycles that the
+//	These macro defines the number of Interrupt Cycles that the
 //	interrupt timer must count before raising an interrupt
 //	to create a target interval of 14.5 us.
 //
@@ -512,24 +722,82 @@
 //
 //	Simplistically the "MHz" clock rate of the board multiplied
 //	by the selected "tick" duration (in microseconds) gives the
-//	answer:
+//	base starting point.
+//
+
+#if F_CPU == 16000000
+//
+//	Arduino Uno (or equivalent)
 //
 //		16 (MHz) x 14.5 (microseconds) = 232 (clock cycles)
 //
-#define TIMER_CLOCK_CYCLES	232
+//	This fits inside the 8-bit interrupt timer limit (255), so
+//	no interrupt pre-scaler is required (so equal to 1).
+//
+//	Within the DCC standard, the half time of a "1" bit is
+//	58 us:
+//		4 ticks of 14.5 us are exactly 58 us (0% error).
+//
+//	Like wise, the nominal half time of a "0" bit is 100 us,
+//	so:
+//		7 ticks of 14.5 us gives a time of 101.5 us (1.5% error).
+//
+#define TIMER_INTERRUPRT_CYCLES	232
+#define TIMER_CLOCK_PRESCALER	1
+
+#else
+
+#if F_CPU == 20000000
+//
+//	Arduino Mega (or equivalent)
+//
+//		20 (MHz) x 14.5 (microseconds) = 290 (clock cycles)
+//
+//	This is too big for the 8 bit timer we are using, so we select
+//	the smallest available prescaller: 8
+//
+//		290 (clock cycles) / 8 = 36.25
+//
+//	Round down to 36 and multiply out to determine the resulting
+//	tick interval:
+//
+//		36 * 8 / 20 = 14.4 us
+//
+//	This makes the time interval the Interrupt Service Routine
+//	must complete in marginally shorter, but is easily offset with
+//	the higher intrinsic clock rate.
+//
+//	Therefore the we get the "half time" of a "1" as:
+//
+//		4 ticks of 14.4 us is 57.6 us (0.6% error)
+//
+//	Like wise, the nominal "half time" of a "0" bit is 100 us,
+//	so:
+//		7 ticks of 14.4 us gives a time of 100.8 us (0.8% error)
+//
+#define TIMER_INTERRUPRT_CYCLES	36
+#define TIMER_CLOCK_PRESCALER	8
+
+#else
+
+//
+//	The target MCU clock frequency has not been accounted for.
+//
+#error "MCU Clock speed calculation needs to be calculate for this clock rate."
+
+//
+//	The calculations outlined above need to carried out and appropiate
+//	results captured in the definitions of TIMER_INTERRUPRT_CYCLES and
+//	TIMER_CLOCK_PRESCALER values.
+//
+
+#endif
+#endif
 
 //
 //	The following two macros return the number of interrupt
 //	ticks which are required to generate half of a "1" or
 //	half of a "0" bit in the DCC signal.
-//
-//	Within the DCC standard, the "half time" of a "1" bit is
-//	58 us:
-//		4 ticks of 14.5 us are exactly 58 us.
-//
-//	Like wise, the nominal "half time" of a "0" bit is 100 us,
-//	so:
-//		7 ticks of 14.5 us gives a time of 101.5 us.
 //
 #define TICKS_FOR_ONE	4
 #define TICKS_FOR_ZERO	7
@@ -604,26 +872,39 @@ static LCD_I2C_Lite lcd( LCD_DISPLAY_ADRS, LCD_DISPLAY_COLS, LCD_DISPLAY_ROWS );
 //	A "drawing" of the target output display:
 //
 //	+--------------------+	The STATUS area of the display, showing:
-//	|SSSSSS              |	The power (L)oad average
+//	|SSSSSS              |	The highest district power (L)oad
 //	|SSSSSS              |	The available (F)ree bit buffers and (P)ower status
 //	|SSSSSS              |	DCC packets (T)ransmitted sent per second
 //	|SSSSSS              |	The (U)ptime in seconds
-//	+--------------------+	
+//	+--------------------+	Right hand column set to '|'
+//
+//	+--------------------+	The DISTRICT area of the display, showing:
+//	|      DDDDDDD       |	Details of each districts status and power
+//	|      DDDDDDD       |	output (the source data for the Load value
+//	|      DDDDDDD       |	in the Status area).
+//	|      DDDDDDD       |
+//	+--------------------+	Right hand column set to '|'
 //
 //	+--------------------+	The BUFFER area of the display, showing:
-//	|      BBBBBBBBBBBBBB|	Buffers in use and the action in place.
-//	|      BBBBBBBBBBBBBB|
-//	|      BBBBBBBBBBBBBB|
-//	|      BBBBBBBBBBBBBB|
+//	|             BBBBBBB|	Buffers in use and the action in place.
+//	|             BBBBBBB|
+//	|             BBBBBBB|
+//	|             BBBBBBB|
 //	+--------------------+	
 //
 //	The following definitions define some parameters which
-//	shape the output ot the LCD.
+//	shape the output ot the LCD.  The fixed values here should
+//	not be modified unless the appropiate code is adjusted
+//	accordingly.
 //
 #define LCD_DISPLAY_STATUS_WIDTH	6
+#define LCD_DISPLAY_STATUS_COLUMN	0
+//
 #define LCD_DISPLAY_BUFFER_WIDTH	7
-#define LCD_DISPLAY_BUFFER_COLS		((LCD_DISPLAY_COLS-LCD_DISPLAY_STATUS_WIDTH)/LCD_DISPLAY_BUFFER_WIDTH)
-
+#define LCD_DISPLAY_BUFFER_COLUMN	(LCD_DISPLAY_COLS-LCD_DISPLAY_BUFFER_WIDTH)
+//
+#define LCD_DISPLAY_DISTRICT_COLUMN	(LCD_DISPLAY_STATUS_COLUMN+LCD_DISPLAY_STATUS_WIDTH)
+#define LCD_DISPLAY_DISTRICT_WIDTH	(LCD_DISPLAY_BUFFER_COLUMN-LCD_DISPLAY_DISTRICT_COLUMN)
 
 #endif
 
@@ -1572,12 +1853,12 @@ static void queue_bit_buffer( TRANS_BUFFER *ptr ) {
 
 //
 //	Current monitoring code.
-//	------------------------
+//	========================
 //
 //	With thanks to Nick Gammon and his post in the thread which can be
 //	found at "http://www.gammon.com.au/forum/?id=11488&reply=5#reply5"
-//	for those crucial first few steps that enable asynchronous ADC
-//	use.
+//	for those crucial first few steps that enabled this asynchronous ADC
+//	implementation.
 //
 
 //
@@ -1623,7 +1904,7 @@ ISR( ADC_vect ) {
 
 //
 //	The interrupt driven DCC packet transmission code.
-//	--------------------------------------------------
+//	==================================================
 //
 
 //
@@ -1645,15 +1926,30 @@ static TRANS_BUFFER circular_buffer[ TRANSMISSION_BUFFERS ];
 static TRANS_BUFFER	*current;
 
 //
-//	Contains the number of the pin which is being flipped
-//	by the interrupt code whist generating the DCC signal.
+//	Define a variable to control the direction output
 //
-//	This should always only contain one of either:
+#ifdef SHIELD_PORT_DIRECT
+
 //
-//		MAIN_TRACK_DIRECTION
-//		PROG_TRACK_DIRECTION
+//	We are controlling the output signal using direct port
+//	and bitmap control.  We define a variable which holds one
+//	side of the output pattern (the other being zero) so that
+//	the Interrupt Service Routine has a simple task flipping
+//	all direction pins on/off as quickly as possible.
 //
-static byte		output_pin;
+static volatile byte	output_mask;
+
+#else
+
+//
+//	If we are not using direct port access then we define
+//	a short array (with associated length) of the pin numbers
+//	which need to be flipped.
+//
+static byte		output_pin[ SHIELD_OUTPUT_DRIVERS ];
+static volatile byte	output_pins;
+
+#endif
 
 //
 //	"side" flips between true and false and lets the routine know
@@ -1714,7 +2010,7 @@ static byte dcc_idle_packet[] = {
 
 //
 //	The following array does not describe a DCC packet, but a
-//	filler series of a single "1" which is required while working
+//	filler of a single "1" which is required while working
 //	with decoders in service mode.
 //
 static byte dcc_filler_data[] = {
@@ -1744,12 +2040,35 @@ ISR( TIMER2_COMPA_vect ) {
 		//	bit to send.
 		//
 		//	We "flip" the output DCC signal now as this is the most
-		//	time consistent position to do so.  The fact that the
-		//	"current" output direction is always the opposite of
-		//	"side" is actually irrelevant.  This should be more
-		//	time efficient.
+		//	time consistent position to do so.
 		//
-		digitalWrite( output_pin, ( side? HIGH: LOW ));
+
+#ifdef SHIELD_PORT_DIRECT
+		//
+		//	We flip all pins in the port according to the value of 'side'.
+		//
+		SHIELD_PORT_DIRECT = side? output_mask: 0;
+#else
+		{
+			//
+			//	We run through the array as fast as possible.
+			//
+			register byte *op, oc;
+
+			op = output_pin;
+			oc = output_pins;
+			if( side ) {
+				while( oc-- ) digitalWrite( *op++, HIGH );
+			}
+			else {
+				while( oc-- ) digitalWrite( *op++, LOW );
+			}
+		}
+#endif
+
+		//
+		//	Now undertake the logical flip and subsequent actions.
+		//
 		if(( side = !side )) {
 			//
 			//	Starting a new bit, is it more of the same?
@@ -1868,7 +2187,7 @@ ISR( TIMER2_COMPA_vect ) {
 		remaining = reload;
 	}
 	//
-	//	In ALL cases this routine needs to complete in less than TIMER_CLOCK_CYCLES
+	//	In ALL cases this routine needs to complete in less than TIMER_INTERRUPRT_CYCLES
 	//	(currently 232 for a 16 MHz machine).  This is approximately 100 actual
 	//	instructions (assuming most instructions take 2 cycle with some taking 3).
 	//
@@ -2057,23 +2376,45 @@ static char *_reply_char( char *buf, char c ) {
 }
 
 static void reply_1( char *buf, char code, int a1 ) {
-	*_reply_out( int_to_text( _reply_in( buf, code ), a1 )) = EOS;
+	buf = _reply_in( buf, code );
+	buf = int_to_text( buf, a1 );
+	buf = _reply_out( buf );
+	*buf = EOS;
 }
 
 static void reply_2( char *buf, char code, int a1, int a2 ) {
-	*_reply_out( int_to_text( _reply_char( int_to_text( _reply_in( buf, code ), a1 ), SPACE ), a2 )) = EOS;
+	buf = _reply_in( buf, code );
+	buf = int_to_text( buf, a1 );
+	buf = _reply_char( buf, SPACE );
+	buf = int_to_text( buf, a2 );
+	buf = _reply_out( buf );
+	*buf = EOS;
 }
 
 #ifndef DCC_PLUS_PLUS_COMPATIBILITY
 
 static void reply_2c( char *buf, char code, int a1, int a2 ) {
-	*_reply_out( _reply_char( _reply_char( int_to_text( _reply_char( int_to_text( _reply_in( buf, code ), a1 ), SPACE ), a2 ), SPACE ), HASH )) = EOS;
+	buf = _reply_in( buf, code );
+	buf = int_to_text( buf, a1 );
+	buf = _reply_char( buf, SPACE );
+	buf = int_to_text( buf, a2 );
+	buf = _reply_char( buf, SPACE );
+	buf = _reply_char( buf, HASH );
+	buf = _reply_out( buf );
+	*buf = EOS;
 }
 
 #endif
 
 static void reply_3( char *buf, char code, int a1, int a2, int a3 ) {
-	*_reply_out( int_to_text( _reply_char( int_to_text( _reply_char( int_to_text( _reply_in( buf, code ), a1 ), SPACE ), a2 ), SPACE ), a3 )) = EOS;
+	buf = _reply_in( buf, code );
+	buf = int_to_text( buf, a1 );
+	buf = _reply_char( buf, SPACE );
+	buf = int_to_text( buf, a2 );
+	buf = _reply_char( buf, SPACE );
+	buf = int_to_text( buf, a3 );
+	buf = _reply_out( buf );
+	*buf = EOS;
 }
 
 //
@@ -2091,30 +2432,34 @@ static void reply_3( char *buf, char code, int a1, int a2, int a3 ) {
 //
 //	Define a list of Error numbers that this code could report
 //
+//	Note:	Probably ought to re-group these numbers into sections
+//		so adding a new error number is less disrutive.
+//
 #define NO_ERROR		0
 #define ERROR_QUEUE_OVERFLOW	1
 #define ERROR_REPORT_FAIL	2
-#define BIT_TRANS_OVERFLOW	3
-#define DCC_COMMAND_OVERFLOW	4
-#define UNRECOGNISED_COMMAND	5
-#define INVALID_BUFFER_NUMBER	6
-#define INVALID_ARGUMENT_COUNT	7
-#define INVALID_ADDRESS		8
-#define INVALID_SPEED		9
-#define INVALID_DIRECTION	10
-#define INVALID_STATE		11
-#define INVALID_CV_NUMBER	12
-#define INVALID_FUNC_NUMBER	13
-#define INVALID_BIT_NUMBER	14
-#define INVALID_BIT_VALUE	15
-#define INVALID_BYTE_VALUE	16
-#define INVALID_WORD_VALUE	17
-#define COMMAND_REPORT_FAIL	18
-#define TRANSMISSION_BUSY	19
-#define COMMAND_QUEUE_FAILED	20
-#define POWER_NOT_OFF		21
-#define POWER_OVERLOAD		22
-#define POWER_SPIKE		23
+#define ERROR_BUFFER_OVERFLOW	3
+#define BIT_TRANS_OVERFLOW	4
+#define DCC_COMMAND_OVERFLOW	5
+#define UNRECOGNISED_COMMAND	6
+#define INVALID_BUFFER_NUMBER	7
+#define INVALID_ARGUMENT_COUNT	8
+#define INVALID_ADDRESS		9
+#define INVALID_SPEED		10
+#define INVALID_DIRECTION	11
+#define INVALID_STATE		12
+#define INVALID_CV_NUMBER	13
+#define INVALID_FUNC_NUMBER	14
+#define INVALID_BIT_NUMBER	15
+#define INVALID_BIT_VALUE	16
+#define INVALID_BYTE_VALUE	17
+#define INVALID_WORD_VALUE	18
+#define COMMAND_REPORT_FAIL	19
+#define TRANSMISSION_BUSY	20
+#define COMMAND_QUEUE_FAILED	21
+#define POWER_NOT_OFF		22
+#define POWER_OVERLOAD		23
+#define POWER_SPIKE		24
 
 //
 //	Define a short queue of errors which are pending transmission
@@ -2255,6 +2600,266 @@ static void flush_error_queue( void ) {
 }
 
 //
+//	Current/Load monitoring system
+//	==============================
+//
+
+//
+//	We are going to use an array of values compounded upon
+//	each other to generate a series of average values which
+//	represent averages over longer and longer periods (each
+//	element of the array twice as long as the previous).
+//
+//	Define the size of the array.
+//
+#define COMPOUNDED_VALUES	10
+
+//
+//	Define the size of the "short average" we will use to
+//	identify a genuine rise in power consumption signifying
+//	a confirmation return.  This is an index into the
+//	compounded average table.
+//
+#define SHORT_AVERAGE_VALUE	2
+
+//
+//	Define a structure used to track one of the drivers
+//	that the firmware is managing.  This contains the state
+//	of that driver and the compounded averaging system.
+//
+//	To save memory, and because the 8 bit load accuracy is
+//	adequate for the load calculations, the load data is always
+//	reduced from 10 bits to an 8 bit value (right shifted two
+//	digits).
+//
+//	compound_value:	The array of (8 bit scaled) compound average
+//			values for the specified driver.
+//
+//	restart:	If non-zero then this driver has been temporarily
+//			disabled due to a power condition (short/overload)
+//			and will be restarted once the restart time has
+//			passed.
+//
+#define DRIVER_LOAD struct driver_load
+DRIVER_LOAD {
+	byte		compound_value[ COMPOUNDED_VALUES ];
+	unsigned long	restart;
+};
+
+//
+//	Create simple macro to re-scale the load value provided
+//	and any constant values provided at the head of the source
+//	code.
+//
+#define RESCALE_LOAD_VALUE(l)	((l)>>2)
+//
+//	... and the opposite.
+//
+#define UNSCALE_LOAD_VALUE(l)	((l)<<2)
+
+//
+//	Define the array of structures used to track each of the
+//	drivers loads.
+//
+static DRIVER_LOAD	output_load[ SHIELD_OUTPUT_DRIVERS ];
+
+//
+//	Keep and index into the output_load array so that each of
+//	the drivers can have its load assessed in sequence.
+//
+static byte		output_index;
+
+//
+//	Finally, this is the flag set if the power code
+//	spots a confirmation signal in the power consumption.
+//
+static bool		load_confirmed;
+
+//
+//	We keep a copy of the last track power reported to
+//	save recalculating it multiple times.
+//
+static int		last_highest_power;
+
+//
+//	This routine is called during setup() to ensure the
+//	driver load code is initialised and the first ADC
+//	is initialised.
+//
+static void init_driver_load( void ) {
+	//
+	//	Ensure all monitoring data is empty
+	//
+	output_index = 0;
+	for( byte d = 0; d < SHIELD_OUTPUT_DRIVERS; d++ ) {
+		for( byte c = 0; c < COMPOUNDED_VALUES; c++ ) {
+			output_load[ d ].compound_value[ c ] = 0;
+		}
+		output_load[ d ].restart = 0;
+	}
+	//
+	//	Start checking current on the first driver.
+	//
+	MONITOR_ANALOGUE_PIN( pgm_read_byte( &( shield_output[ 0 ].analogue )));
+}
+
+//
+//	Routine called by the power managment code to "clear"
+//	any temporary district/driver reset timeouts as the
+//	power code is about to make wholesale changes to
+//	what is powered on and off.
+//
+static void clear_driver_restarts( void ) {
+	for( byte d = 0; d < SHIELD_OUTPUT_DRIVERS; output_load[ d++ ].restart = 0 );
+}
+
+//
+//	This routine is called every time track electrical load data
+//	becomes available.  The routine serves two purposes:
+//
+//		Monitor for overload and spike conditions
+//
+//		Detect return signals from devices attached
+//		to the DCC bus.
+//
+static void monitor_current_load( unsigned long now, int amps ) {
+	DRIVER_LOAD	*dp;
+
+#ifdef DEBUG_POWER_MONITOR
+	Serial.print( "AMPS=" );
+	Serial.println( amps );
+#endif
+
+	//
+	//	set shortcut pointer into the output_load[] array.
+	//
+	dp = &( output_load[ output_index ]);
+
+	//
+	//	Rescale the presented reading from 10 to 8 bits.
+	//
+	amps = RESCALE_LOAD_VALUE( amps );
+
+	//
+	//	Compound in the new figure.
+	//
+	for( byte i = 0; i < COMPOUNDED_VALUES; i++ ) {
+		//
+		//	This needs to be careful, as the intermediate addition will often exceed
+		//	the 8 bit value, so the actual calculation still needs to be performed in
+		//	at least 16 bits.
+		//
+		amps = ( amps + (int)( dp->compound_value[ i ])) >> 1;
+		dp->compound_value[ i ] = (byte)amps;
+	}
+
+	//
+	//	Is there a power spike?
+	//
+	if( dp->compound_value[ 1 ] > RESCALE_LOAD_VALUE( INSTANT_CURRENT_LIMIT )) {
+		//
+		//	No question - cut the power to this driver now.
+		//
+		digitalWrite( pgm_read_byte( &( shield_output[ output_index ].enable )), LOW );
+		//
+		//	We flatten the power averaging data to simplify
+		//	power up restarting and schedule the restart.
+		//
+		for( byte i = 0; i < COMPOUNDED_VALUES; dp->compound_value[ i++ ] = 0 );
+		dp->restart = now + DRIVER_RESET_PERIOD;
+		//
+		//	Now, log an error to give the reason for
+		//	cutting the power.
+		//
+		report_error( POWER_SPIKE, output_index );
+	}
+	else {
+
+		//
+		//	Has there been a big enough jump compared a short term average?
+		//
+		if( dp->compound_value[ COMPOUNDED_VALUES - 1 ] > RESCALE_LOAD_VALUE( AVERAGE_CURRENT_LIMIT )) {
+			//
+			//	Cut the power here because there is some sort of long
+			//	term higher power drain.
+			//
+			digitalWrite( pgm_read_byte( &( shield_output[ output_index ].enable )), LOW );
+			//
+			//	We flatten the power averaging data to simplify
+			//	power up restarting and schedule the restart.
+			//
+			for( byte i = 0; i < COMPOUNDED_VALUES; dp->compound_value[ i++ ] = 0 );
+			dp->restart = now + DRIVER_RESET_PERIOD;
+			//
+			//	Report error/action to host computer
+			//
+			report_error( POWER_OVERLOAD, amps );
+		}
+		else {
+
+			//	We now assess if there has been a "jump" in the current draw
+			//	which would indicate a confirmation signal being sent back
+			//	from an attached decoder.
+			//
+			if(( dp->compound_value[ SHORT_AVERAGE_VALUE ] - dp->compound_value[ COMPOUNDED_VALUES-1 ]) > RESCALE_LOAD_VALUE( MINIMUM_DELTA_AMPS )) {
+				//
+				//	We believe that we have seen a confirmation.
+				//
+				load_confirmed = true;
+			}
+		}
+	}
+
+	//
+	//	Move to the next driver..
+	//
+	if(( output_index += 1 ) >= SHIELD_OUTPUT_DRIVERS ) output_index = 0;
+
+	//
+	//	..and start a new reading on that.
+	//
+	MONITOR_ANALOGUE_PIN( pgm_read_byte( &( shield_output[ output_index ].analogue )));
+}
+
+//
+//	Routine called by the watchdog to attempt restart of power
+//	districts/driver currently suspended.
+//
+static void restart_suspended_drivers( unsigned long now ) {
+	for( byte i = 0; i < SHIELD_OUTPUT_DRIVERS; i++ ) {
+		DRIVER_LOAD *dp = &( output_load[ i ]);
+
+		if( dp->restart &&( now >= dp->restart )) {
+			//
+			//	Try restarting this driver/district.
+			//
+			dp->restart = 0;
+			digitalWrite( pgm_read_byte( &( shield_output[ output_index ].enable )), HIGH );
+		}
+	}
+}
+
+//
+//	Routine called by the watchdog timer code to report
+//	track power dynamically.
+//
+static void report_track_power( void ) {
+	char	buffer[ 16 ];
+
+	//
+	//	Here we will simply find the highest load value and return that figure.
+	//
+	last_highest_power = 0;
+	for( byte i = 0; i < SHIELD_OUTPUT_DRIVERS; i++ ) {
+		int t = output_load[ i ].compound_value[ COMPOUNDED_VALUES-1 ];
+		if( t > last_highest_power ) last_highest_power = t;
+	}
+	last_highest_power = UNSCALE_LOAD_VALUE( last_highest_power );
+	reply_1( buffer, SELECT_ALT( 'L', 'a' ), last_highest_power );
+	if( !queue_output( buffer )) report_error( COMMAND_REPORT_FAIL, SELECT_ALT( 'L', 'a' ));
+}
+
+//
 //	Power selection and control code.
 //	---------------------------------
 //
@@ -2294,9 +2899,76 @@ static byte power_on_main_track( void ) {
 	POWER_STATE	prev;
 
 	prev = global_power_state;
-	output_pin = MAIN_TRACK_DIRECTION;
-	digitalWrite( MAIN_TRACK_ENABLE, HIGH );
-	digitalWrite( PROG_TRACK_ENABLE, LOW );
+
+	//
+	//	clear out any "in progress" district/driver restarts
+	//
+	clear_driver_restarts();
+	
+#ifdef SHIELD_PORT_DIRECT
+	{
+		byte	new_mask;
+		
+		//
+		//	Rebuild the output mask to reflect the new output
+		//	pin mask.  We "buffer" the change to the output_mask
+		//	value to ensure that it moves directly from its old value
+		//	to zero then to its completed new value without containing
+		//	any intermediate values.  This ensures that the ISR
+		//	only ever sees valid and complete bit masks.
+		//
+		output_mask = new_mask = 0;
+		for( byte i = 0; i < SHIELD_OUTPUT_DRIVERS; i++ ) {
+			if( pgm_read_byte( &( shield_output[ i ].main ))) {
+				//
+				//	Enable the specific operating track driver..
+				//
+				digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), HIGH );
+				//
+				//	Add the pin to the mask
+				//
+				new_mask |= pgm_read_byte( &( shield_output[ i ].direction ));
+			}
+			else {
+				//
+				//	Disable the specific programming track driver.
+				//
+				digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), LOW );
+			}
+		}
+		output_mask = new_mask;
+	}
+#else
+	{
+		//
+		//	Set up the output pin array for the main track.
+		//
+		output_pins = 0;
+		for( byte i = 0; i < SHIELD_OUTPUT_DRIVERS; i++ ) {
+			if( pgm_read_byte( &( shield_output[ i ].main ))) {
+				//
+				//	Enable the specific operating track driver..
+				//
+				digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), HIGH );
+				//
+				//	Add the direction pin to the output array..
+				//
+				output_pin[ output_pins ] = pgm_read_byte( &( shield_output[ i ].direction ));
+				//
+				//	..and then (after updating the array) increase the pin count.
+				//
+				output_pins++;
+			}
+			else {
+				//
+				//	Disable the specific programming track driver.
+				//
+				digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), LOW );
+			}
+		}
+	}
+#endif
+
 	global_power_state = GLOBAL_POWER_MAIN;
 	return( prev != GLOBAL_POWER_MAIN );
 }
@@ -2314,9 +2986,76 @@ static byte power_on_prog_track( void ) {
 	POWER_STATE	prev;
 
 	prev = global_power_state;
-	output_pin = PROG_TRACK_DIRECTION;
-	digitalWrite( MAIN_TRACK_ENABLE, LOW );
-	digitalWrite( PROG_TRACK_ENABLE, HIGH );
+
+	//
+	//	clear out any "in progress" district/driver restarts
+	//
+	clear_driver_restarts();
+	
+#ifdef SHIELD_PORT_DIRECT
+	{
+		byte	new_mask;
+		
+		//
+		//	Rebuild the output mask to reflect the new output
+		//	pin mask.  We "buffer" the change to the output_mask
+		//	value to ensure that it moves directly from its old value
+		//	to zero then to its completed new value without containing
+		//	any intermediate values.  This ensures that the ISR
+		//	only ever sees valid and complete bit masks.
+		//
+		output_mask = new_mask = 0;
+		for( byte i = 0; i < SHIELD_OUTPUT_DRIVERS; i++ ) {
+			if( pgm_read_byte( &( shield_output[ i ].main ))) {
+				//
+				//	Disable the specific operating track driver.
+				//
+				digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), LOW );
+			}
+			else {
+				//
+				//	Enable the specific programming track driver..
+				//
+				digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), HIGH );
+				//
+				//	Add the pin to the mask
+				//
+				new_mask |= pgm_read_byte( &( shield_output[ i ].direction ));
+			}
+		}
+		output_mask = new_mask;
+	}
+#else
+	{
+		//
+		//	Set up the output pin array for the main track.
+		//
+		output_pins = 0;
+		for( byte i = 0; i < SHIELD_OUTPUT_DRIVERS; i++ ) {
+			if( pgm_read_byte( &( shield_output[ i ].main ))) {
+				//
+				//	Disable the specific operating track driver.
+				//
+				digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), LOW );
+			}
+			else {
+				//
+				//	Enable the specific programming track driver..
+				//
+				digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), HIGH );
+				//
+				//	Add the direction pin to the output array..
+				//
+				output_pin[ output_pins ] = pgm_read_byte( &( shield_output[ i ].direction ));
+				//
+				//	..and then (after updating the array) increase the pin count.
+				//
+				output_pins++;
+			}
+		}
+	}
+#endif
+
 	global_power_state = GLOBAL_POWER_PROG;
 	return( prev != GLOBAL_POWER_PROG );
 }
@@ -2332,131 +3071,28 @@ static byte power_off_tracks( void ) {
 	POWER_STATE	prev;
 
 	prev = global_power_state;
-	digitalWrite( MAIN_TRACK_ENABLE, LOW );
-	digitalWrite( PROG_TRACK_ENABLE, LOW );
-	global_power_state = GLOBAL_POWER_OFF;
-	return( prev != GLOBAL_POWER_OFF);
-}
-
-//
-//	Current/Load monitoring system
-//	==============================
-//
-
-//
-//	We are going to use an array of values compounded upon
-//	each other to generate a series of average values which
-//	represent averages over longer and longer periods (each
-//	element of the array twice as long as the previous).
-//
-//	Define the size of the array.
-//
-#define COMPOUNDED_VALUES	10
-
-//
-//	Define the size of the "short average" we will use to
-//	identify a genuine rise in power consumption signifying
-//	a confirmation return.  This is an index into the
-//	compounded average table.
-//
-#define SHORT_AVERAGE_VALUE	2
-
-//
-//	This is the array of compounded average values.
-//
-static int	load_compound_value[ COMPOUNDED_VALUES ];
-//
-//	Finally, this is the flag set if the power code
-//	spots a confirmation signal in the power consumption.
-//
-static bool	load_confirmed;
-
-//
-//	This routine is called every time track electrical load data
-//	becomes available.  The routine serves two purposes:
-//
-//		Monitor for overload and spike conditions
-//
-//		Detect return signals from devices attached
-//		to the DCC bus.
-//
-static void monitor_current_load( int amps ) {
-
-#ifdef DEBUG_POWER_MONITOR
-	Serial.print( "AMPS=" );
-	Serial.println( amps );
+	
+	//
+	//	clear out any "in progress" district/driver restarts
+	//
+	clear_driver_restarts();
+	
+#ifdef SHIELD_PORT_DIRECT
+	//
+	//	Clear the output pin mask.
+	//
+	output_mask = 0;
+#else
+	//
+	//	Mark the output pin array as empty.
+	//
+	output_pins = 0;
 #endif
 
-	//
-	//	Compound in the new figure.
-	//
-	for( byte i = 0; i < COMPOUNDED_VALUES; i++ ) {
-		amps = ( load_compound_value[ i ] = ( amps + load_compound_value[ i ]) >> 1 );
-	}
-	//
-	//	Is there a power spike?
-	//
-	if( load_compound_value[ 1 ] > INSTANT_CURRENT_LIMIT ) {
-		//
-		//	No question - cut the power now.
-		//
-		if( power_off_tracks()) {
-			//
-			//	Now, log an error to give the reason for
-			//	cutting the power, and then send back an
-			//	appropriate power report letting the software
-			//	know this has happened.
-			//
-			report_error( POWER_SPIKE, amps );
-			if( !queue_output( SELECT_ALT( "[P0]\n", "<p0>\n" ))) report_error( COMMAND_REPORT_FAIL, SELECT_ALT( 'P', 'p' ));
-			//
-			//	We flatten the power averaging data to simplify
-			//	power up restarting.
-			//
-			for( byte i = 0; i < COMPOUNDED_VALUES; load_compound_value[ i++ ] = 0 );
-		}
-		return;
-	}
-	//
-	//	Has there been a big enough jump compared a short term average?
-	//
-	if( load_compound_value[ COMPOUNDED_VALUES - 1 ] > AVERAGE_CURRENT_LIMIT ) {
-		//
-		//	Cut the power here because there is some sort of long
-		//	term higher power drain.
-		//
-		if( power_off_tracks()) {
-			report_error( POWER_OVERLOAD, amps );
-			if( !queue_output( SELECT_ALT( "[P0]\n", "<p0>\n" ))) report_error( COMMAND_REPORT_FAIL, SELECT_ALT( 'P', 'p' ));
-			for( byte i = 0; i < COMPOUNDED_VALUES; load_compound_value[ i++ ] = 0 );
-		}
-		return;
-	}
-	//	We now assess if there has been a "jump" in the current draw
-	//	which would indicate a confirmation signal being sent back
-	//	from an attached decoder.
-	//
-	if(( load_compound_value[ SHORT_AVERAGE_VALUE ] - load_compound_value[ COMPOUNDED_VALUES-1 ]) > MINIMUM_DELTA_AMPS ) {
-		//
-		//	We believe that we have seen a confirmation.
-		//
-		load_confirmed = true;
-	}
-	//
-	//	Kick off the next reading.
-	//
-	RESTART_ANALOGUE_READ();
-}
+	for( byte i = 0; i < SHIELD_OUTPUT_DRIVERS; i++ ) digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), LOW );
 
-//
-//	Routine called by the watchdog timer code to report
-//	track power dynamically.
-//
-static void report_track_power( void ) {
-	char	buffer[ 16 ];
-
-	reply_1( buffer, SELECT_ALT( 'L', 'a' ), load_compound_value[ COMPOUNDED_VALUES-1 ]);
-	if( !queue_output( buffer )) report_error( COMMAND_REPORT_FAIL, SELECT_ALT( 'L', 'a' ));
+	global_power_state = GLOBAL_POWER_OFF;
+	return( prev != GLOBAL_POWER_OFF);
 }
 
 //
@@ -2727,7 +3363,13 @@ static void initialise_data_structures( void ) {
 	//	Now prime the transmission interrupt routine state variables.
 	//
 	current = circular_buffer;
-	output_pin = MAIN_TRACK_DIRECTION;
+
+#ifdef SHIELD_PORT_DIRECT
+	output_mask = 0;
+#else
+	output_pins = 0;
+#endif
+
 	side = true;
 	remaining = 1;
 	bit_string = dcc_idle_packet;
@@ -2748,57 +3390,29 @@ void setup( void ) {
 	while( !Serial );
 	Serial.println( "Arduino DCC Generator Firmware (" SELECT_ALT( "Native", "DCC++" ) " personality)" );
 	//
-	//	Initialise the MAIN track H Bridge pins.
+	//	Initialise all of the H Bridge Drivers from the
+	//	motor shield configuration table.
 	//
-	pinMode( MAIN_TRACK_DIRECTION, OUTPUT );
-	digitalWrite( MAIN_TRACK_DIRECTION, LOW );
-	pinMode( MAIN_TRACK_ENABLE, OUTPUT );
-	digitalWrite( MAIN_TRACK_ENABLE, LOW );
-	pinMode( MAIN_TRACK_BRAKE, OUTPUT );
-	digitalWrite( MAIN_TRACK_BRAKE, LOW );
-	pinMode( MAIN_TRACK_LOAD, INPUT );
-	(void)analogRead( MAIN_TRACK_LOAD );
+	for( byte i = 0; i < SHIELD_OUTPUT_DRIVERS; i++ ) {
+		byte	p;
+
+		p = pgm_read_byte( &( shield_output[ i ].direction ));
+		pinMode( p, OUTPUT );
+		digitalWrite( p, LOW );
+		p = pgm_read_byte( &( shield_output[ i ].enable ));
+		pinMode( p, OUTPUT );
+		digitalWrite( p, LOW );
+		p = pgm_read_byte( &( shield_output[ i ].brake ));
+		if( p != BRAKE_NOT_AVAILABLE ) {
+			pinMode( p, OUTPUT );
+			digitalWrite( p, LOW );
+		}
+		p = pgm_read_byte( &( shield_output[ i ].load ));
+		pinMode( p, INPUT );
+		(void)analogRead( p );
+	}
 	//
-	//	Initialise the Programming track H Bridge pins.
-	//
-	pinMode( PROG_TRACK_DIRECTION, OUTPUT );
-	digitalWrite( PROG_TRACK_DIRECTION, LOW );
-	pinMode( PROG_TRACK_ENABLE, OUTPUT );
-	digitalWrite( PROG_TRACK_ENABLE, LOW );
-	pinMode( PROG_TRACK_BRAKE, OUTPUT );
-	digitalWrite( PROG_TRACK_BRAKE, LOW );
-	pinMode( PROG_TRACK_LOAD, INPUT );
- 	(void)analogRead( PROG_TRACK_LOAD );
-	//
-	//	Disable interrupts.
-	//
-	cli();
-	//
-	//		Set Timer2 to count clock cycles 1:1.	
-	//
-	TCCR2A = 0;	//	Set entire TCCR2A register to 0
-	TCCR2B = 0;	//	Same for TCCR2B
-	TCNT2  = 0;	//	Initialize counter value to 0
-	//
-	//		Set compare match register to
-	//		generate the correct tick duration.
-	//
-	OCR2A = TIMER_CLOCK_CYCLES;
-	//
-	//		Turn on CTC mode
-	//
-	TCCR2A |= (1 << WGM21);
-	//
-	//		Set CS20 bit for no pre-scaler
-	//
-	TCCR2B |= (1 << CS20);   
-	//
-	//		Enable timer compare interrupt
-	//
-	TIMSK2 |= (1 << OCIE2A);
-	//
-	//	Now set up the data structures.
-	//	-------------------------------
+	//	Set up the data structures.
 	//
 	initialise_data_structures();
 
@@ -2807,14 +3421,67 @@ void setup( void ) {
 	init_function_cache();
 	
 #endif
+
+	//
+	//	Set up the Interrupt Service Routine
+	//	------------------------------------
+	//
+	//	Disable interrupts.
+	//
+	cli();
+	//
+	//		Set Timer2 to default empty values.	
+	//
+	TCCR2A = 0;	//	Set entire TCCR2A register to 0
+	TCCR2B = 0;	//	Same for TCCR2B
+	TCNT2  = 0;	//	Initialize counter value to 0
+	//
+	//		Set compare match register to
+	//		generate the correct tick duration.
+	//
+	OCR2A = TIMER_INTERRUPRT_CYCLES;
+	//
+	//		Turn on CTC mode
+	//
+	TCCR2A |= ( 1 << WGM21 );
+
+#if TIMER_CLOCK_PRESCALER == 1
+
+	//
+	//		Set CS20 bit for no pre-scaler (factor == 1 )
+	//
+	TCCR2B |= ( 1 << CS20 );
+	
+#else
+#if TIMER_CLOCK_PRESCALER == 8
+
+	//
+	//		Set CS21 bit for pre-scaler factoror 8
+	//
+	TCCR2B |= ( 1 << CS21 );
+#else
+
+	//
+	//	Prescaler value not supported.
+	//
+#error "Select interrupt clock prescaler not supported"
+
+#endif
+#endif
+
+	//
+	//		Enable timer compare interrupt
+	//
+	TIMSK2 |= ( 1 << OCIE2A );
   	//
 	//	Enable interrupts.
 	//
 	sei();
+
 	//
-	//	Kick of the power management system.
+	//	Kick of the power monitor and management system.
 	//
-	MONITOR_ANALOGUE_PIN( MAIN_TRACK_ANALOGUE );
+	init_driver_load();
 
 	//
 	//	Optional hardware initialisations
@@ -2851,6 +3518,44 @@ void setup( void ) {
 #include "mul_div.h"
 
 //
+//	Routine that "draws" a styalised bar-graph of an 8 bit value
+//	in a supplied number of characters.
+//
+static void bar_graph( byte val, char *buf, byte len ) {
+	byte	div, a, b, c;
+
+	div = 255 / len;
+	a = div >> 2;
+	b = div >> 1;
+	c = a + b;
+
+	while( len-- ) {
+		if( val > c ) {
+			*buf++ = '#';
+		}
+		else {
+			if( val > b ) {
+				*buf++ = '=';
+			}
+			else {
+				if( val < a ) {
+					*buf++ = SPACE;
+				}
+				else {
+					*buf++ = '-';
+				}
+			}
+		}
+		if( val >= div ) {
+			val -= div;
+		}
+		else {
+			val = 0;
+		}
+	}
+}
+
+//
 //	Time of previous call to display update (ms).
 //
 static unsigned long last_lcd_update = 0;
@@ -2858,22 +3563,30 @@ static unsigned long last_lcd_update = 0;
 //
 //	Update routine.
 //
+//	This routine re-draws *every* character on the display *every* time.
+//
+//	This is inefficient and un-necesary, but for the moment is the simplest
+//	way to ensure that the display is correctly drawn.
+//
+//	An initialisation routine needs to be created that pre-draws the static
+//	elements of the display which would be called from setup().
+//
 static void display_lcd_updates( unsigned long now ) {
 	unsigned int	delta,		// Milli-Seconds between calls
-			uptime;		// Minutes system has been up
-
-	char		buffer[ LCD_DISPLAY_STATUS_WIDTH ];
+			uptime;		// Seconds system has been up
 
 	//
 	//	store the seconds uptime.
 	//
 	uptime = now / 1000;
+
 	//
 	//	Establish the time since we last ran the
 	//	LCD update funciton
 	//
 	delta = (unsigned int)( now - last_lcd_update );
 	last_lcd_update = now;
+
 	//
 	//	Output the STATUS column data in the following order:
 	//
@@ -2884,26 +3597,26 @@ static void display_lcd_updates( unsigned long now ) {
 	//	|SSSSSS              |	The (U)ptime in seconds
 	//	+--------------------+
 	//
-	//	The code will a visual bounary at the far right of the status
-	//	area to create a visual break between the status and buffer areas.
-	//
-	buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_ALT( '|', ':' );
 	//
 	//	Now complete each of the rows in LCD_DISPLAY_STATUS_WIDTH-1 characters.
 	//
 	{
+		char		buffer[ LCD_DISPLAY_STATUS_WIDTH ];
+
 		//
 		//	Row 0, always available, Power Load Average
 		//
 		buffer[ 0 ] = 'L';
-		if( backfill_int_to_text( buffer+1, load_compound_value[ COMPOUNDED_VALUES-1 ], LCD_DISPLAY_STATUS_WIDTH-2 )) {
+		if( backfill_int_to_text( buffer+1, last_highest_power, LCD_DISPLAY_STATUS_WIDTH-2 )) {
 			memset( buffer+1, HASH, LCD_DISPLAY_STATUS_WIDTH-2 );
 		}
-		lcd.position( 0, 0 );
+		buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_ALT( '|', ':' );
+		lcd.position( LCD_DISPLAY_STATUS_COLUMN, 0 );
 		lcd.write( buffer, LCD_DISPLAY_STATUS_WIDTH );
 	}
 #if LCD_DISPLAY_ROWS > 1
 	{
+		char		buffer[ LCD_DISPLAY_STATUS_WIDTH ];
 		byte	c;
 
 		//
@@ -2938,12 +3651,15 @@ static void display_lcd_updates( unsigned long now ) {
 		if( backfill_int_to_text( buffer+3, c, LCD_DISPLAY_STATUS_WIDTH-4 )) {
 			memset( buffer+3, HASH, LCD_DISPLAY_STATUS_WIDTH-4 );
 		}
-		lcd.position( 0, 1 );
+		buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_ALT( '|', ':' );
+		lcd.position( LCD_DISPLAY_STATUS_COLUMN, 1 );
 		lcd.write( buffer, LCD_DISPLAY_STATUS_WIDTH );
 	}
 #endif
 #if LCD_DISPLAY_ROWS > 2
 	{
+		char		buffer[ LCD_DISPLAY_STATUS_WIDTH ];
+
 		//
 		//	Row 2, DCC packets (T)ransmitted sent per second
 		//
@@ -2951,12 +3667,15 @@ static void display_lcd_updates( unsigned long now ) {
 		if( backfill_int_to_text( buffer+1, (int)mul_div( statistic_packets, 1000, delta ), LCD_DISPLAY_STATUS_WIDTH-2 )) {
 			memset( buffer+1, HASH, LCD_DISPLAY_STATUS_WIDTH-2 );
 		}
-		lcd.position( 0, 2 );
+		buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_ALT( '|', ':' );
+		lcd.position( LCD_DISPLAY_STATUS_COLUMN, 2 );
 		lcd.write( buffer, LCD_DISPLAY_STATUS_WIDTH );
 	}
 #endif
 #if LCD_DISPLAY_ROWS > 3
 	{
+		char		buffer[ LCD_DISPLAY_STATUS_WIDTH ];
+
 		//
 		//	Row 3, The (U)ptime in seconds
 		//
@@ -2985,49 +3704,119 @@ static void display_lcd_updates( unsigned long now ) {
 				buffer[ LCD_DISPLAY_STATUS_WIDTH-2 ] = 'h';
 			}
 		}
-		lcd.position( 0, 3 );
+		buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_ALT( '|', ':' );
+		lcd.position( LCD_DISPLAY_STATUS_COLUMN, 3 );
 		lcd.write( buffer, LCD_DISPLAY_STATUS_WIDTH );
 	}
 #endif
+
+	//
+	//	+--------------------+	The DISTRICT area of the display, showing:
+	//	|      DDDDDDD       |	Details of each districts status and power
+	//	|      DDDDDDD       |	output (the source data for the Load value
+	//	|      DDDDDDD       |	in the Status area).
+	//	|      DDDDDDD       |
+	//	+--------------------+	Right hand column set to '|'
+	//
+	{
+		char		buffer[ LCD_DISPLAY_DISTRICT_WIDTH ];
+		byte		d, r, c;
+
+		//
+		//	Get the compiler to calculate the parameters
+		//	which the display updates need to operate within.
+		//
+		//	LCD_DISPLAY_DISTRICT_COLS	How many columns are required
+		//	LCD_DISPLAY_DISTRICT_COLW	How wide each column is
+		//	LCD_DISPLAY_DISTRICT_LEFT	How many columns are left over
+		//					including the edge bar
+		//
+#define LCD_DISPLAY_DISTRICT_COLS ((SHIELD_OUTPUT_DRIVERS+LCD_DISPLAY_ROWS-1)/LCD_DISPLAY_ROWS)
+#define LCD_DISPLAY_DISTRICT_COLW ((LCD_DISPLAY_DISTRICT_WIDTH-1)/LCD_DISPLAY_DISTRICT_COLS)
+#define LCD_DISPLAY_DISTRICT_LEFT (LCD_DISPLAY_DISTRICT_WIDTH-(LCD_DISPLAY_DISTRICT_COLS*LCD_DISPLAY_DISTRICT_COLW))
+
+		//
+		//	Display the columns which do not contain valid data (the edge and
+		//	any unused spaces).
+		//
+		memset( buffer, SPACE, LCD_DISPLAY_DISTRICT_WIDTH-1 );
+		buffer[ LCD_DISPLAY_DISTRICT_WIDTH-1 ] = '|';
+		for( r = 0; r < LCD_DISPLAY_ROWS; r++ ) {
+			lcd.position( LCD_DISPLAY_BUFFER_COLUMN - LCD_DISPLAY_DISTRICT_LEFT, r );
+			lcd.write( buffer+( LCD_DISPLAY_DISTRICT_WIDTH - LCD_DISPLAY_DISTRICT_LEFT ), LCD_DISPLAY_DISTRICT_LEFT );
+		}
+			
+		//
+		//	We step through the drivers and walk r,c up and down, left to right.
+		//
+		r = 0;
+		c = 0;
+		for( d = 0; d < SHIELD_OUTPUT_DRIVERS; d++ ) {
+			lcd.position( LCD_DISPLAY_DISTRICT_COLUMN + c, r );
+			buffer[ 0 ] = 'A' + d;
+			if( output_load[ d ].restart ) {
+				//
+				//	This driver/district is in a restart
+				//	caused by a power exception.
+				//
+				memset( buffer+1, '*', LCD_DISPLAY_DISTRICT_COLW-1 );
+				lcd.blink( true );
+				lcd.write( buffer, LCD_DISPLAY_DISTRICT_COLW );
+				lcd.blink( false );
+			}
+			else {
+				bar_graph( output_load[ d ].compound_value[ COMPOUNDED_VALUES-1 ], buffer+1, LCD_DISPLAY_DISTRICT_COLW-1 );
+				lcd.write( buffer, LCD_DISPLAY_DISTRICT_COLW );
+			}
+			if(( r += 1 ) >= LCD_DISPLAY_ROWS ) {
+				r = 0;
+				c += LCD_DISPLAY_DISTRICT_COLW;
+			}
+		}
+		//
+		//	Empty any remaining spaces
+		//
+		if( c < ( LCD_DISPLAY_DISTRICT_WIDTH - LCD_DISPLAY_DISTRICT_LEFT )) {
+			memset( buffer, SPACE, LCD_DISPLAY_DISTRICT_WIDTH-1 );
+			while( c < ( LCD_DISPLAY_DISTRICT_WIDTH - LCD_DISPLAY_DISTRICT_LEFT )) {
+				lcd.position( LCD_DISPLAY_DISTRICT_COLUMN + c, r );
+				lcd.write( buffer, LCD_DISPLAY_DISTRICT_COLW );
+				if(( r += 1 ) >= LCD_DISPLAY_ROWS ) {
+					r = 0;
+					c += LCD_DISPLAY_DISTRICT_COLW;
+				}
+			}
+		}
+	}
+
 	//
 	//	+--------------------+	The BUFFER area of the display, showing:
-	//	|      BBBBBBBBBBBBBB|	Buffers in use and the action in place.
-	//	|      BBBBBBBBBBBBBB|	This area is broken up into as many one
-	//	|      BBBBBBBBBBBBBB|	line areas as will fit.  Each area is
-	//	|      BBBBBBBBBBBBBB|	LCD_DISPLAY_BUFFER_WIDTH bytes wide.
+	//	|             BBBBBBB|	Buffers in use and the action in place.
+	//	|             BBBBBBB|	This area is broken up into as many one
+	//	|             BBBBBBB|	line areas as will fit.  Each area is
+	//	|             BBBBBBB|	LCD_DISPLAY_BUFFER_WIDTH bytes wide.
 	//	+--------------------+	
 	//
 	{
-		byte	r, c;
+		byte	r;
 
 		r = 0;
-		c = 0;
 		for( byte i = 0; i < TRANSMISSION_BUFFERS; i++ ) {
 			if( circular_buffer[ i ].state == TBS_RUN ) {
-				lcd.position( LCD_DISPLAY_STATUS_WIDTH + c * LCD_DISPLAY_BUFFER_WIDTH, r );
-				if(( r += 1 ) >= LCD_DISPLAY_ROWS ) {
-					r = 0;
-					if(( c += 1 ) >= LCD_DISPLAY_BUFFER_COLS ) {
-						break;
-					}
-				}
+				lcd.position( LCD_DISPLAY_BUFFER_COLUMN, r );
 				lcd.write( circular_buffer[ i ].display, LCD_DISPLAY_BUFFER_WIDTH );
+				if(( r += 1 ) >= LCD_DISPLAY_ROWS ) break;
 			}
 		}
 		//
 		//	Clear out remaining spaces.
 		//
-		while( c < LCD_DISPLAY_BUFFER_COLS ) {
-			while( r < LCD_DISPLAY_ROWS ) {
-				lcd.position( LCD_DISPLAY_STATUS_WIDTH + c * LCD_DISPLAY_BUFFER_WIDTH, r );
-				lcd.fill( SPACE, LCD_DISPLAY_BUFFER_WIDTH );
-				r++;
-			}
-			r = 0;
-			c++;
+		while( r < LCD_DISPLAY_ROWS ) {
+			lcd.position( LCD_DISPLAY_BUFFER_COLUMN, r );
+			lcd.fill( SPACE, LCD_DISPLAY_BUFFER_WIDTH );
+			r++;
 		}
 	}
-	//ZZ//
 }
 
 #endif
@@ -3968,10 +4757,7 @@ static void scan_line( char *buf ) {
 					break;
 				}
 				if( cmd == '1' ) {
-					if( power_on_main_track()) {
-						MONITOR_ANALOGUE_PIN( MAIN_TRACK_ANALOGUE );
-						link_main_buffers();
-					}
+					if( power_on_main_track()) link_main_buffers();
 					reply_1( reply, 'p', 1 );
 					if( !queue_output( reply )) report_error( COMMAND_REPORT_FAIL, cmd );
 				}
@@ -4026,14 +4812,7 @@ static void scan_line( char *buf ) {
 							report_error( POWER_NOT_OFF, cmd );
 							break;
 						}
-						if( power_on_main_track()) {
-							//
-							//	Set up power monitor and
-							//	circular buffers
-							//
-							MONITOR_ANALOGUE_PIN( MAIN_TRACK_ANALOGUE );
-							link_main_buffers();
-						}
+						if( power_on_main_track()) link_main_buffers();
 						reply_1( reply, 'P', 1 );
 						if( !queue_output( reply )) report_error( COMMAND_REPORT_FAIL, cmd );
 						break;
@@ -4046,14 +4825,7 @@ static void scan_line( char *buf ) {
 							report_error( POWER_NOT_OFF, cmd );
 							break;
 						}
-						if( power_on_prog_track()) {
-							//
-							//	Set up power monitor and
-							//	circular buffers
-							//
-							MONITOR_ANALOGUE_PIN( PROG_TRACK_ANALOGUE );
-							link_prog_buffers();
-						}
+						if( power_on_prog_track()) link_prog_buffers();
 						reply_1( reply, 'P', 2 );
 						if( !queue_output( reply )) report_error( COMMAND_REPORT_FAIL, cmd );
 						break;
@@ -4937,7 +5709,7 @@ static void scan_line( char *buf ) {
 //
 //	The buffer:
 //
-static char serial_buf[ SERIAL_BUFFER_SIZE+1 ];
+static char serial_buf[ SERIAL_BUFFER_SIZE+1 ];	// "+1" to allow for EOS with checking code.
 static byte serial_used = 0;
 static bool in_cmd_packet = false;
 
@@ -4995,13 +5767,54 @@ static void process_input( int count ) {
 						//	"Valid" character (at least it is a normal character), so
 						//	save it if possible.
 						//
-						if( serial_used < SERIAL_BUFFER_SIZE-1 ) serial_buf[ serial_used++ ] = c;
+						if( serial_used < SERIAL_BUFFER_SIZE-1 ) {
+							serial_buf[ serial_used++ ] = c;
+						}
+						else {
+							//
+							//	we have lost some part of the command.  Report error and
+							//	drop the malformed command.
+							//
+							report_error( ERROR_BUFFER_OVERFLOW, SERIAL_BUFFER_SIZE );
+							serial_used = 0;
+							in_cmd_packet =  false;
+						}
 					}
 				}
 				break;
 			}
 		}
 	}
+}
+
+//
+//	Serial Input/Output Polling
+//	---------------------------
+//
+//	This routine needs tobe called strategically through the
+//	event loop to ensure that the Serial IO is not allowed
+//	to overflow either input or output buffers.  The requirement
+//	is to call this routine after each sub-tack of any
+//	substance.
+//
+static void poll_serial_io( void ) {
+	int	i;
+	
+	//
+	//	If there is any data pending on the serial line
+	//	grab it and process it.
+	//
+	if(( i = Serial.available())) process_input( i );
+
+	//
+	//	Then try to return any pending output from
+	//	the firmware.
+	//
+	if(( i = Serial.availableForWrite())) process_output( i );
+
+	//
+	//	Go back to what ever was going on.
+	//
 }
 
 //
@@ -5020,14 +5833,14 @@ static unsigned long watchdog = 0;
 //	Finally, the main event loop:
 //
 void loop( void ) {
-	int		i;
 	unsigned long	now;
+
+	//
+	//	Grab a copy of the time "now" as several routines
+	//	require a notion of how time has passed.
+	//
+	now = millis();
 	
-	//
-	//	If there is any data pending on the serial line
-	//	grab it
-	//
-	if(( i = Serial.available())) process_input( i );
 	//
 	//	Every time we spin through the loop we give the
 	//	management service routine a slice of the CPU time
@@ -5035,6 +5848,8 @@ void loop( void ) {
 	//	synchronised correctly.
 	//
 	management_service_routine();
+	poll_serial_io();
+
 	//
 	//	Power related actions triggered only when data is ready
 	//
@@ -5042,7 +5857,8 @@ void loop( void ) {
 		//
 		//	Analyse current data.
 		//	
-		monitor_current_load( track_load_reading );
+		monitor_current_load( now, track_load_reading );
+		poll_serial_io();
 		
 #ifdef DEBUG_STATISTICS
 		//
@@ -5055,18 +5871,25 @@ void loop( void ) {
 	//
 	//	Time for watch dog activities?
 	//
-	if(( now = millis()) > watchdog ) {
+	if( now > watchdog ) {
 		//
 		//	Yes, but before getting on with them, set the
 		//	next watchdog time.
 		//
 		watchdog = now + WATCHDOG_INTERVAL;
 
+		//
+		//	Are there driver/districts which need restarting?
+		//
+		restart_suspended_drivers( now );
+		poll_serial_io();
+
 #ifndef DCC_PLUS_PLUS_COMPATIBILITY
 		//
 		//	Forward out an asynchronous power update.
 		//
 		report_track_power();
+		poll_serial_io();
 #endif
 
 #ifdef LCD_DISPLAY_ENABLE
@@ -5074,6 +5897,7 @@ void loop( void ) {
 		//	Send updates to the LCD
 		//
 		display_lcd_updates( now );
+		poll_serial_io();
 #endif
 
 #ifdef DEBUG_STATISTICS
@@ -5114,11 +5938,7 @@ void loop( void ) {
 	//	opportunity to queue some output data.
 	//
 	flush_error_queue();
-	//
-	//	Finally, try to return any pending output from
-	//	the firmware.
-	//
-	if(( i = Serial.availableForWrite())) process_output( i );
+	poll_serial_io();
 
 #ifdef DEBUG_STATISTICS
 	//
