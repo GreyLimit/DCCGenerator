@@ -92,6 +92,62 @@
 //
 
 //
+//	Debugging options
+//	=================
+//
+//	Define any of the following macros to optionally include
+//	at compile time additional code to output status and data
+//	reports to the serial line.
+//
+//	This data will not be in a valid communications format so
+//	it should be possible to run this firmware against the host
+//	software.  Timing of the  firmware might be unavoidably
+//	impacted.
+//
+//	DEBUG_BUFFER_MANAGER	Define to get status updates from
+//				buffer management routine
+//
+//	DEBUG_BIT_SLICER	Define to get output from the routine
+//				which converts a series of bytes into
+//				the bits transitions which the time
+//				critical code uses to generate the
+//				output signal.
+//
+//	DEBUG_POWER_MONITOR	Define to get details of the power
+//				monitoring code
+//
+//	DEBUG_STATISTICS	Collect and transmit statistics pertinent
+//				to the frequency that sections of the code
+//				are executed, per second.
+//
+//	DEBUG_BUFFER_TABLE	Send an outline breakdown of the bit
+//				buffers to the Serial port in the event of
+//				one of the bit buffer related errors
+//				being generated.
+//
+//	DEBUG_SERIAL_POLL	Include code to monitor the time intervals
+//				between calls to the serial polling routine
+//				as new "maximal" are discovered send these
+//				as raw data down the serial line.
+//
+//#define DEBUG_BUFFER_MANAGER	1
+//#define DEBUG_BIT_SLICER	1
+//#define DEBUG_POWER_MONITOR	1
+//#define DEBUG_STATISTICS	1
+//#define DEBUG_BUFFER_TABLE	1
+//#define DEBUG_SERIAL_POLL	1
+
+//
+//	Define the macros ASSERT_VERIFICATION to include some software
+//	verification code in the firmware.  In the event of conformance
+//	checks failing errors will be produced.
+//
+#define ASSERT_VERIFICATION	1
+
+//
+//	Liquid Crystal Display
+//	======================
+//
 //	To implement an I2C connected LCD display, define the
 //	following macros and values.
 //
@@ -137,6 +193,9 @@
 //
 
 //
+//	Include Local and System Libraries
+//	==================================
+//
 //	Bring in the necessary IO and Interrupt definitions.
 //
 #include <avr/io.h>
@@ -159,7 +218,8 @@
 #endif
 
 //
-//	General universal constants.
+//	General universal constants
+//	===========================
 //
 #define NL	'\n'
 #define CR	'\r'
@@ -178,53 +238,6 @@
 #define TEXT_BUFFER 8
 
 //
-//	Debugging options
-//	=================
-//
-//	Define any of the following macros to optionally include
-//	at compile time additional code to output status and data
-//	reports to the serial line.
-//
-//	This data will not be in a valid communications format so
-//	it should be possible to run this firmware against the host
-//	software.  Timing of the  firmware might be unavoidably
-//	impacted.
-//
-//	DEBUG_BUFFER_MANAGER	Define to get status updates from
-//				buffer management routine
-//
-//	DEBUG_BIT_SLICER	Define to get output from the routine
-//				which converts a series of bytes into
-//				the bits transitions which the time
-//				critical code uses to generate the
-//				output signal.
-//
-//	DEBUG_POWER_MONITOR	Define to get details of the power
-//				monitoring code
-//
-//	DEBUG_STATISTICS	Collect and transmit statistics pertinent
-//				to the frequency that sections of the code
-//				are executed, per second.
-//
-//	DEBUG_BUFFER_TABLE	Send an outline breakdown of the bit
-//				buffers to the Serial port in the event of
-//				one of the bit buffer related errors
-//				being generated.
-//
-//#define DEBUG_BUFFER_MANAGER	1
-//#define DEBUG_BIT_SLICER	1
-//#define DEBUG_POWER_MONITOR	1
-//#define DEBUG_STATISTICS	1
-//#define DEBUG_BUFFER_TABLE	1
-
-//
-//	Define the macros ASSERT_VERIFICATION to include some software
-//	verification code in the firmware.  In the event of conformance
-//	checks failing errors will be produced.
-//
-#define ASSERT_VERIFICATION	1
-
-//
 //	Compatibility Support
 //	=====================
 //
@@ -237,6 +250,11 @@
 #else
 #define SELECT_ALT(a,b)		a
 #endif
+
+//
+//	Serial Host Connectivity
+//	========================
+//
 
 //
 //	The following definitions allow for the similarity which is
@@ -258,7 +276,16 @@
 //		9600 14400 19200 38400 57600 115200
 //
 #define SERIAL_BAUD_RATE	SELECT_ALT( 38400, 115200 )
-#define SERIAL_BUFFER_SIZE	32
+#define SERIAL_BUFFER_SIZE	64
+
+//
+//	Advanced declaration of the Serial Input Routines.
+//
+static void poll_serial_input( void );
+static byte ready_serial_input( void );
+static char read_serial_input( void );
+
+
 
 //
 //	High Level Configuration values.
@@ -308,6 +335,12 @@
 //		just four bytes.
 //
 #define MAXIMUM_DCC_COMMAND	6
+
+//
+//	Define the maximum number of bytes that can be accespted as
+//	a complete input command.
+//
+#define MAXIMUM_DCC_CMD		16
 
 //
 //	Define a maximum number of characters that are required to
@@ -682,7 +715,7 @@ static const SHIELD_DRIVER shield_output[ SHIELD_OUTPUT_DRIVERS ] PROGMEM = {
 //
 //	No motor shield board selected.
 //
-#error "Not motor shield board type selected."
+#error "No motor shield board type selected."
 
 #endif
 #endif
@@ -3501,7 +3534,7 @@ void setup( void ) {
 	lcd.begin();
 	lcd.backlight( true );
 	lcd.clear();
-
+	lcd.enable_poll( poll_serial_input );
 #endif
 }
 
@@ -3572,11 +3605,11 @@ static unsigned long last_lcd_update = 0;
 //	elements of the display which would be called from setup().
 //
 static void display_lcd_updates( unsigned long now ) {
-	unsigned int	delta,		// Milli-Seconds between calls
-			uptime;		// Seconds system has been up
+	unsigned int	uptime,
+			delta;
 
 	//
-	//	store the seconds uptime.
+	//	Store the uptime as seconds.
 	//
 	uptime = now / 1000;
 
@@ -3597,7 +3630,6 @@ static void display_lcd_updates( unsigned long now ) {
 	//	|SSSSSS              |	The (U)ptime in seconds
 	//	+--------------------+
 	//
-	//
 	//	Now complete each of the rows in LCD_DISPLAY_STATUS_WIDTH-1 characters.
 	//
 	{
@@ -3614,6 +3646,7 @@ static void display_lcd_updates( unsigned long now ) {
 		lcd.position( LCD_DISPLAY_STATUS_COLUMN, 0 );
 		lcd.write( buffer, LCD_DISPLAY_STATUS_WIDTH );
 	}
+
 #if LCD_DISPLAY_ROWS > 1
 	{
 		char		buffer[ LCD_DISPLAY_STATUS_WIDTH ];
@@ -3656,6 +3689,7 @@ static void display_lcd_updates( unsigned long now ) {
 		lcd.write( buffer, LCD_DISPLAY_STATUS_WIDTH );
 	}
 #endif
+
 #if LCD_DISPLAY_ROWS > 2
 	{
 		char		buffer[ LCD_DISPLAY_STATUS_WIDTH ];
@@ -3672,20 +3706,23 @@ static void display_lcd_updates( unsigned long now ) {
 		lcd.write( buffer, LCD_DISPLAY_STATUS_WIDTH );
 	}
 #endif
+
 #if LCD_DISPLAY_ROWS > 3
 	{
-		char		buffer[ LCD_DISPLAY_STATUS_WIDTH ];
+		char			buffer[ LCD_DISPLAY_STATUS_WIDTH ];
+		byte			odd;
 
 		//
 		//	Row 3, The (U)ptime in seconds
 		//
 		buffer[ 0 ] = 'U';
+		odd = uptime & 1;
 		if( uptime < 1000 ) {
 			//
 			//	Display time in seconds.
 			//
 			(void)backfill_int_to_text( buffer+1, uptime, LCD_DISPLAY_STATUS_WIDTH-3 );
-			buffer[ LCD_DISPLAY_STATUS_WIDTH-2 ] = 's';
+			buffer[ LCD_DISPLAY_STATUS_WIDTH-2 ] = odd? 's': SPACE;
 		}
 		else {
 			if(( uptime /= 60 ) < 1000 ) {
@@ -3693,7 +3730,7 @@ static void display_lcd_updates( unsigned long now ) {
 				//	Display time in minutes.
 				//
 				(void)backfill_int_to_text( buffer+1, uptime, LCD_DISPLAY_STATUS_WIDTH-3 );
-				buffer[ LCD_DISPLAY_STATUS_WIDTH-2 ] = 'm';
+				buffer[ LCD_DISPLAY_STATUS_WIDTH-2 ] = odd? 'm': SPACE;
 			}
 			else {
 				//
@@ -3701,7 +3738,7 @@ static void display_lcd_updates( unsigned long now ) {
 				//
 				uptime /= 60;
 				(void)backfill_int_to_text( buffer+1, uptime, LCD_DISPLAY_STATUS_WIDTH-3 );
-				buffer[ LCD_DISPLAY_STATUS_WIDTH-2 ] = 'h';
+				buffer[ LCD_DISPLAY_STATUS_WIDTH-2 ] = odd? 'h': SPACE;
 			}
 		}
 		buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_ALT( '|', ':' );
@@ -3802,7 +3839,7 @@ static void display_lcd_updates( unsigned long now ) {
 
 		r = 0;
 		for( byte i = 0; i < TRANSMISSION_BUFFERS; i++ ) {
-			if( circular_buffer[ i ].state == TBS_RUN ) {
+			if(( circular_buffer[ i ].state == TBS_RUN )||( circular_buffer[ i ].state == TBS_RELOAD )) {
 				lcd.position( LCD_DISPLAY_BUFFER_COLUMN, r );
 				lcd.write( circular_buffer[ i ].display, LCD_DISPLAY_BUFFER_WIDTH );
 				if(( r += 1 ) >= LCD_DISPLAY_ROWS ) break;
@@ -5702,32 +5739,27 @@ static void scan_line( char *buf ) {
 }
 
 //
-//	This routine gathers input command from the serial port
-//	and consolidates it into a buffer ready for processing.
+//	The command buffer:
 //
-
-//
-//	The buffer:
-//
-static char serial_buf[ SERIAL_BUFFER_SIZE+1 ];	// "+1" to allow for EOS with checking code.
-static byte serial_used = 0;
+static char cmd_buf[ MAXIMUM_DCC_CMD+1 ];	// "+1" to allow for EOS with checking code.
+static byte cmd_used = 0;
 static bool in_cmd_packet = false;
 
 //
 //	The character input routine.
 //
-static void process_input( int count ) {
+static void process_input( byte count ) {
 	while( count-- ) {
 		char	c;
 
-		switch(( c = Serial.read())) {
+		switch(( c = read_serial_input())) {
 			case PROT_IN_CHAR: {
 				//
 				//	Found the start of a command, regardless of what we thought
 				//	we were doing we clear out the buffer and start collecting
 				//	the content of the packet.
 				//
-				serial_used = 0;
+				cmd_used = 0;
 				in_cmd_packet =  true;
 				break;
 			}
@@ -5740,12 +5772,12 @@ static void process_input( int count ) {
 					//
 					//	Process line and reset buffer.
 					//
-					serial_buf[ serial_used ] = EOS;
-					scan_line( serial_buf );
+					cmd_buf[ cmd_used ] = EOS;
+					scan_line( cmd_buf );
 					//
 					//	Now reset the buffer space.
 					//
-					serial_used = 0;
+					cmd_used = 0;
 					in_cmd_packet =  false;
 				}
 				break;
@@ -5759,7 +5791,7 @@ static void process_input( int count ) {
 						//
 						//	Invalid character for a command - abandon the current command.
 						//
-						serial_used = 0;
+						cmd_used = 0;
 						in_cmd_packet =  false;
 					}
 					else {
@@ -5767,16 +5799,16 @@ static void process_input( int count ) {
 						//	"Valid" character (at least it is a normal character), so
 						//	save it if possible.
 						//
-						if( serial_used < SERIAL_BUFFER_SIZE-1 ) {
-							serial_buf[ serial_used++ ] = c;
+						if( cmd_used < MAXIMUM_DCC_CMD-1 ) {
+							cmd_buf[ cmd_used++ ] = c;
 						}
 						else {
 							//
 							//	we have lost some part of the command.  Report error and
 							//	drop the malformed command.
 							//
-							report_error( ERROR_BUFFER_OVERFLOW, SERIAL_BUFFER_SIZE );
-							serial_used = 0;
+							report_error( DCC_COMMAND_OVERFLOW, MAXIMUM_DCC_CMD );
+							cmd_used = 0;
 							in_cmd_packet =  false;
 						}
 					}
@@ -5791,30 +5823,111 @@ static void process_input( int count ) {
 //	Serial Input/Output Polling
 //	---------------------------
 //
-//	This routine needs tobe called strategically through the
-//	event loop to ensure that the Serial IO is not allowed
-//	to overflow either input or output buffers.  The requirement
-//	is to call this routine after each sub-tack of any
-//	substance.
+
 //
-static void poll_serial_io( void ) {
-	int	i;
-	
-	//
-	//	If there is any data pending on the serial line
-	//	grab it and process it.
-	//
-	if(( i = Serial.available())) process_input( i );
+//	This routine gathers input from the serial port without
+//	processing and keeps it pending time to process it.
+//
+
+#ifdef DEBUG_SERIAL_POLL
+//
+//	Define a pair of variables to hold the last micros() reading
+//	and the largest reading so far.
+//
+static unsigned long	micros_last = 0,
+			micros_longest = 0;
+
+#endif
+
+//
+//	The Serial Buffer
+//
+static char	serial_buf[ SERIAL_BUFFER_SIZE ];
+static byte	serial_in = 0,				// Where to add
+		serial_out = 0,				// Where to remove
+		serial_avail = SERIAL_BUFFER_SIZE;	// How many empty
+
+//
+//	Polling routine called all over the place.
+//
+static void poll_serial_input( void ) {
+	byte	ready;
+
+#ifdef DEBUG_SERIAL_POLL
+	{
+		unsigned long now = micros();
+		
+		if( now > micros_last ) {
+			if( micros_longest ) {
+				unsigned long diff = now - micros_last;
+				
+				if( diff > micros_longest ) {
+					micros_longest = diff;
+					Serial.print( 'I' );
+					Serial.println( micros_longest );
+				}
+				//
+				//	we will shrink the longest delay, slowly,
+				//	so that we achieve a periodic refresh of
+				//	the longest delay.
+				//
+				if( micros_longest > 100 ) micros_longest -= micros_longest >> 5;
+			}
+			else {
+				//
+				//	Crude way of skipping the first
+				//	reading as this would count all the
+				//	time during set up etc etc...
+				//
+				micros_longest = 1;
+			}
+		}
+		micros_last = now;
+	}
+#endif
+
+	if(( ready = Serial.available())) {
+		while( serial_avail && ready ) {
+			serial_buf[ serial_in++ ] = Serial.read();
+			if( serial_in >= SERIAL_BUFFER_SIZE ) serial_in = 0;
+			serial_avail--;
+			ready--;
+		}
+	}
+}
+
+//
+//	Return how much data is available
+//
+static byte ready_serial_input( void ) {
+	return( SERIAL_BUFFER_SIZE - serial_avail );
+}
+
+//
+//	Get next character from the serial buffer
+//
+static char read_serial_input( void ) {
+	char	v;
+
+	ASSERT( serial_avail < SERIAL_BUFFER_SIZE );
+
+	v = serial_buf[ serial_out++ ];
+	if( serial_out >= SERIAL_BUFFER_SIZE ) serial_out = 0;
+	serial_avail++;
+	return( v );
+}
+
+//
+//	Deal with getting data back to the host computer
+//
+static void poll_serial_output( void ) {
+	byte	i;
 
 	//
 	//	Then try to return any pending output from
 	//	the firmware.
 	//
 	if(( i = Serial.availableForWrite())) process_output( i );
-
-	//
-	//	Go back to what ever was going on.
-	//
 }
 
 //
@@ -5834,12 +5947,19 @@ static unsigned long watchdog = 0;
 //
 void loop( void ) {
 	unsigned long	now;
+	byte		ready;
 
 	//
 	//	Grab a copy of the time "now" as several routines
 	//	require a notion of how time has passed.
 	//
 	now = millis();
+
+	//
+	//	Is there Serial data to be processed...
+	//
+	if(( ready = ready_serial_input())) process_input( ready );
+	poll_serial_input();
 	
 	//
 	//	Every time we spin through the loop we give the
@@ -5848,7 +5968,8 @@ void loop( void ) {
 	//	synchronised correctly.
 	//
 	management_service_routine();
-	poll_serial_io();
+	poll_serial_output();
+	poll_serial_input();
 
 	//
 	//	Power related actions triggered only when data is ready
@@ -5858,7 +5979,8 @@ void loop( void ) {
 		//	Analyse current data.
 		//	
 		monitor_current_load( now, track_load_reading );
-		poll_serial_io();
+		poll_serial_output();
+		poll_serial_input();
 		
 #ifdef DEBUG_STATISTICS
 		//
@@ -5882,22 +6004,23 @@ void loop( void ) {
 		//	Are there driver/districts which need restarting?
 		//
 		restart_suspended_drivers( now );
-		poll_serial_io();
+		poll_serial_input();
 
 #ifndef DCC_PLUS_PLUS_COMPATIBILITY
 		//
 		//	Forward out an asynchronous power update.
 		//
 		report_track_power();
-		poll_serial_io();
+		poll_serial_output();
+		poll_serial_input();
 #endif
 
 #ifdef LCD_DISPLAY_ENABLE
 		//
-		//	Send updates to the LCD
+		//	Send updates to the LCD.  Input polling is managed
+		//	by the LCD library.
 		//
 		display_lcd_updates( now );
-		poll_serial_io();
 #endif
 
 #ifdef DEBUG_STATISTICS
@@ -5938,7 +6061,8 @@ void loop( void ) {
 	//	opportunity to queue some output data.
 	//
 	flush_error_queue();
-	poll_serial_io();
+	poll_serial_output();
+	poll_serial_input();
 
 #ifdef DEBUG_STATISTICS
 	//

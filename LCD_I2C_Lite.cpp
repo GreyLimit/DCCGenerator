@@ -168,6 +168,7 @@ void LCD_I2C_Lite::position( uint8_t col, uint8_t row ) {
 void LCD_I2C_Lite::write( uint8_t val ) {
 	bitSet( _outputState, LCD_I2C_LITE_REGISTER_SELECT );
 	LCD_Write( val, 41 );
+	if( do_poll ) (*poll_func)();
 	bitClear( _outputState, LCD_I2C_LITE_REGISTER_SELECT );
 }
 
@@ -175,20 +176,37 @@ void LCD_I2C_Lite::write( const char *str ) {
 	char	c;
 
 	bitSet( _outputState, LCD_I2C_LITE_REGISTER_SELECT );
-	while(( c = *str++ )) LCD_Write( (uint8_t)c, 41 );
+	while(( c = *str++ )) {
+		LCD_Write( (uint8_t)c, 41 );
+		if( do_poll ) (*poll_func)();
+	}
 	bitClear( _outputState, LCD_I2C_LITE_REGISTER_SELECT );
 }
 
 void LCD_I2C_Lite::write( const char *str, uint8_t len ) {
 	bitSet( _outputState, LCD_I2C_LITE_REGISTER_SELECT );
-	while( len-- ) LCD_Write( (uint8_t)( *str++ ), 41 );
+	while( len-- ) {
+		LCD_Write( (uint8_t)( *str++ ), 41 );
+		if( do_poll ) (*poll_func)();
+	}
 	bitClear( _outputState, LCD_I2C_LITE_REGISTER_SELECT );
 }
 
 void LCD_I2C_Lite::fill( char val, uint8_t len ) {
 	bitSet( _outputState, LCD_I2C_LITE_REGISTER_SELECT );
-	while( len-- ) LCD_Write( val, 41 );
+	while( len-- ) {
+		LCD_Write( val, 41 );
+		if( do_poll ) (*poll_func)();
+	}
 	bitClear( _outputState, LCD_I2C_LITE_REGISTER_SELECT );
+}
+
+void LCD_I2C_Lite::enable_poll( void (*func)( void )) {
+	do_poll = true;
+	poll_func = func;
+}
+void LCD_I2C_Lite::disable_poll( void ) {
+	do_poll = false;
 }
 
 

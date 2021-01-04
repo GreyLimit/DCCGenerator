@@ -107,6 +107,9 @@ private:
 	void	LCD_Init( uint8_t output, int usec );
 	void	LCD_Write( uint8_t output, int usec );
 
+	void	(*poll_func)( void );
+	bool	do_poll;
+
 public:
 	LCD_I2C_Lite( uint8_t address, uint8_t cols, uint8_t rows );
 
@@ -126,6 +129,9 @@ public:
 	void write( const char *str );
 	void write( const char *str, uint8_t len );
 	void fill( char val, uint8_t len );
+
+	void enable_poll( void (*func)( void ));
+	void disable_poll( void );
 };
 
 #endif
