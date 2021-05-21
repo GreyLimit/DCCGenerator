@@ -123,7 +123,7 @@
 #define ASSERT_VERIFICATION	1
 
 //
-//	Quick options sanity check and define seletion macro for
+//	Quick options sanity check and define selection macro for
 //	programming track options.
 //
 #if defined( DCC_PLUS_PLUS_COMPATIBILITY ) && defined( PROGRAMMING_TRACK )
@@ -215,7 +215,7 @@
 
 //
 //	This *Will Not* compile, yet.  This is due
-//	to the substancially different TWI interface.
+//	to the substantially different TWI interface.
 //
 //	Timer macros to be defined too.
 //
@@ -416,14 +416,6 @@
 //		9600 14400 19200 38400 57600 115200
 //
 #define SERIAL_BAUD_RATE	SELECT_COMPAT( 38400, 115200 )
-//
-//	Clear SERIAL_BUFFER_SIZE if already defined (ATmega32U4, you
-//	know who you are).
-//
-#ifdef SERIAL_BUFFER_SIZE
-#undef SERIAL_BUFFER_SIZE
-#endif
-#define SERIAL_BUFFER_SIZE	SELECT_SML( 64, 96, 128 )
 
 //
 //	High Level Configuration values.
@@ -566,7 +558,7 @@
 //	commands and 20 for programming commands.  These are the
 //	short and long preambles.
 //
-//	I havce made the long pre-amble even longer to assist with
+//	I have made the long pre-amble even longer to assist with
 //	confirmation detection.
 //
 #define DCC_SHORT_PREAMBLE	15
@@ -1590,8 +1582,8 @@ static byte get_function( int target, byte func, byte val ) {
 //	of code monitors or controls it.  The concept here is that (like a game
 //	of "ping pong") the responsibility for the buffers is handed back and
 //	forth between the bits of code.  The intention here is to avoid requiring
-//	locked out sections of code (using cli() and sei()) which might impact
-//	the over all timing of the firmware.
+//	locked out sections of code (using noInterrupts() and interrupts()) which
+//	might impact the over all timing of the firmware.
 //
 //	In the following table:
 //
@@ -1768,7 +1760,7 @@ TRANS_BUFFER {
 	//	------------------------
 	//
 	//	When is a reply required and what does that reply contain?  This
-	//	is applied only at the end of a series of pending records (ie when
+	//	is applied only at the end of a series of pending records (i.e. when
 	//	pending is NULL).
 	//
 	byte	reply;
@@ -3773,7 +3765,8 @@ static void link_buffer_chain( void ) {
 //	pick up the wrong address.  It is a small risk but the table
 //	extends across multiple page boundaries (256 byte sections), and so
 //	the addresses differ in both the MSB and LSB.  To protect against this
-//	possibility the assignments need to be bracketed between cli() and sei().
+//	possibility the assignments need to be bracketed between noInterrupts()
+//	and interrupts().
 //
 //	These routines are only called when one or other track is being power up.
 //
@@ -3786,10 +3779,10 @@ static void link_main_buffers( void ) {
 	//	to only contain the operating track buffers.
 	//
 #ifdef PROGRAMMING_TRACK
-	cli();
+	noInterrupts();
 	circular_buffer[ PROGRAMMING_BASE_BUFFER-1 ].next = circular_buffer;
 	circular_buffer[ TRANSMISSION_BUFFERS-1 ].next = circular_buffer;
-	sei();
+	interrupts();
 #endif
 }
 
@@ -3802,10 +3795,10 @@ static void link_prog_buffers( void ) {
 	//	This routine is called to shape the circular buffers
 	//	to only contain the programming track buffer.
 	//
-	cli();
+	noInterrupts();
 	circular_buffer[ PROGRAMMING_BASE_BUFFER-1 ].next = circular_buffer + PROGRAMMING_BASE_BUFFER;
 	circular_buffer[ TRANSMISSION_BUFFERS-1 ].next = circular_buffer + PROGRAMMING_BASE_BUFFER;
-	sei();
+	interrupts();
 }
 
 #endif
@@ -3932,7 +3925,7 @@ void setup( void ) {
 	//
 	//	Disable interrupts.
 	//
-	cli();
+	noInterrupts();
 	//
 	//		Set Timer2 to default empty values.	
 	//
@@ -3980,7 +3973,7 @@ void setup( void ) {
   	//
 	//	Enable interrupts.
 	//
-	sei();
+	interrupts();
 
 	//
 	//	Kick off the power monitor and management system.
