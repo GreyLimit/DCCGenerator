@@ -4,6 +4,16 @@ Firmware for an Arduino UNO and motor shield to generate an NMRA DCC signal for 
 
 For the moment, simply reading the source code should provide an insight into what this is and how it does it.
 
+Update (May 2021)
+
+The Code Generator now support either the original Arduino Uno and Motor Shield, or can be installed into
+some bespoke hardware to provide a larger number of DCC districts (up to six).
+
+In addition to this the TWI and LCD code previously used has been removed and replaced with more flexible
+packages which have a small memory foot print and do not block execution of the firmware (unless told to do so).
+
+This has enabled some "fixes" to be removed and restored a cleaner operting structure to the firmware (imho).
+
 ## DCC Plus Plus Command Summary
 
 The following summary provides the sub-set of DCC commands
