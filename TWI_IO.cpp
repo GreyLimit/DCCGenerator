@@ -678,7 +678,7 @@ byte twi_lowestFrequency( void ) {
 //
 //	Call this routine in the setup() function.
 //
-void twi_init( byte adrs, bool gcall, bool isr, bool pullup = true ) {
+void twi_init( byte adrs, bool gcall, bool isr, bool pullup ) {
 	//
 	//	Initialise default timeout.
 	//
@@ -779,11 +779,12 @@ void twi_disable( void ) {
 }
 
 //
-//	void twi_setTimeout( unsigned long ms )
-//	---------------------------------------
+//	void twi_setTimeout( word ms )
+//	------------------------------
 //
 //	Set the maximum time the software will wait for some
 //	action to complete before aborting the activity.
+//	Specified in microseconds.
 //
 void twi_setTimeout( word us ) {
 	if( us ) {
