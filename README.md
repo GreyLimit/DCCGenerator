@@ -12,7 +12,7 @@ some bespoke hardware to provide a larger number of DCC districts (up to six).
 In addition to this the TWI and LCD code previously used has been removed and replaced with more flexible
 packages which have a small memory foot print and do not block execution of the firmware (unless told to do so).
 
-This has enabled some "fixes" to be removed and restored a cleaner operting structure to the firmware (imho).
+This has enabled some "fixes" to be removed and restored a cleaner operating structure to the firmware (imho).
 
 ## DCC Plus Plus Command Summary
 
