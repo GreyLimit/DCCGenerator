@@ -172,7 +172,7 @@ public:
 	void begin( void );		// Use inside setup();
 
 	//
-	//	IMPROTANT
+	//	IMPORTANT
 	//	=========
 	//
 	//	This routine must be called at least once
@@ -219,7 +219,7 @@ public:
 	//
 	//	The frame buffer hijacks the top bit of each
 	//	byte to indicate update status.  As a result
-	//	onlt 7-ASCII can be displayed through this
+	//	only 7-ASCII can be displayed through this
 	//	mechanism.
 	//
 	bool setBuffer( byte *buffer, byte size );
