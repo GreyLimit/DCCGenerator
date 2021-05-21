@@ -103,10 +103,10 @@
 //			handle the TWI hardware asynchronously.  If set
 //			to false then the software will poll the TWI hardware.
 //
-//	pullup		(Optional, default to true).  Enable or disable
-//			the on-board pull-up resistors in the MCU.
+//	pullup		Enable or disable the on-board pull-up resistors
+//			in the MCU.
 //
-extern void twi_init( byte adrs, bool gcall, bool isr, bool pullup = true );
+extern void twi_init( byte adrs, bool gcall, bool isr, bool pullup );
 
 //
 //	Disables the TWI interface completely.
@@ -137,9 +137,8 @@ extern byte twi_bestFrequency( byte freq );
 extern byte twi_lowestFrequency( void );
 
 //
-//	Set the software timeout for activities.
-//
-//	Note: time specified in Microseconds
+//	Set the software timeout for activities.  Time
+//	specified in microseconds.
 //
 extern void twi_setTimeout( word us );
 
