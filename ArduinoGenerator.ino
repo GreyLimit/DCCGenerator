@@ -1,7 +1,7 @@
 ///
 ///	ArduinoGenerator: Model railway DCC signal generator.
 ///
-/// 	Firmware for an Arduino Uno R3 and Motorshield which
+/// 	Firmware for an Arduino Uno R3 and Motor shield which
 ///	can generate a compliant NMRA DCC signal suitable for
 ///	the operation and control of mobile and accessory DCC
 ///	decoders.
@@ -32,8 +32,8 @@
 //	Minimum hardware required:
 //
 //		Arduino UNO R3 (or Mega 2560)
-//		Arduino Motor Shield
-//		15 volt DC power supply
+//		Arduino Motor Shield or bespoke Driver board
+//		15 volt (max) DC power supply
 //
 
 //
@@ -53,28 +53,11 @@
 //#define DCC_PLUS_PLUS_COMPATIBILITY 1
 
 //
-//	Compilation note:
+//	To include a programming track as the last DCC output/district
+//	(and include the associated programming commands) then
+//	define the symbol PROGRAMMING_TRACK.
 //
-//	If when compiled for a target host you get the warning
-//	about insufficient memory and potential instability issues
-//	then the simplest (safest!) way to reduce memory consumption
-//	is to reduce the number of bit buffers for each category
-//	of use.  It is possible to reduce each to 1 (though no less),
-//	but reducing the number of mobile buffers reduces the number
-//	of engines which can be operated in parallel.
-//
-//	Values are defined at approximately line 350 and currently have
-//	the following default values:
-//
-//		ACCESSORY_TRANS_BUFFERS	3
-//		MOBILE_TRANS_BUFFERS	6
-//		PROGRAMMING_BUFFERS	1
-//
-//	Do not change PROGRAMMING_BUFFERS from 1, it will stop the
-//	programming track working due the the extended "multi-packet"
-//	timing and sequential packet structure that programming a DCC
-//	decoder requires.
-//
+#define PROGRAMMING_TRACK 1
 
 //
 //	Source Code note:
@@ -125,24 +108,152 @@
 //				one of the bit buffer related errors
 //				being generated.
 //
-//	DEBUG_SERIAL_POLL	Include code to monitor the time intervals
-//				between calls to the serial polling routine
-//				as new "maximal" are discovered send these
-//				as raw data down the serial line.
-//
 //#define DEBUG_BUFFER_MANAGER	1
 //#define DEBUG_BIT_SLICER	1
 //#define DEBUG_POWER_MONITOR	1
 //#define DEBUG_STATISTICS	1
 //#define DEBUG_BUFFER_TABLE	1
-//#define DEBUG_SERIAL_POLL	1
 
 //
-//	Define the macros ASSERT_VERIFICATION to include some software
+//	Define the macro ASSERT_VERIFICATION to include some software
 //	verification code in the firmware.  In the event of conformance
-//	checks failing errors will be produced.
+//	checks failing then errors will be logged and (hopefully) sent to
+//	the host computer.
 //
 #define ASSERT_VERIFICATION	1
+
+//
+//	Quick options sanity check and define seletion macro for
+//	programming track options.
+//
+#if defined( DCC_PLUS_PLUS_COMPATIBILITY ) && defined( PROGRAMMING_TRACK )
+#error "PROGRAMMING_TRACK cannot be defined when compiling for Compatibility mode"
+#endif
+
+#ifdef PROGRAMMING_TRACK
+#define SELECT_PROG(y,n)	y
+#else
+#define SELECT_PROG(y,n)	n
+#endif
+
+//
+//	Hardware Specific Configuration Definitions
+//	===========================================
+//
+//	The following definitions are used to abstract the differences
+//	between each of the boards.
+//
+//	The Macro "SELECT_SML(s,m,l)" will be used to select alternate
+//	configuration values based on the apparent "size" of the target
+//	micro controller.  The parameter "s" represents small MCUs with
+//	2 KBytes SRAM.  "m" represents systems with between
+//	2 and 4 KBytes SRAM.  All other systems will have the "l" value
+//	applied.
+//
+#if defined( __AVR_ATmega328__ )| defined( __AVR_ATmega328P__ )| defined( __AVR_ATmega328PB__ )
+//
+//	Standard Nano or Uno R3 configuration
+//	-------------------------------------
+//
+#define HW_TITLE		"AVR ATmega328"
+
+//
+//	SRAM = 2 KBytes
+//
+#define SELECT_SML(s,m,l)	s
+
+//
+//	Map Timer symbols onto target Timer hardware
+//
+#define HW_TCCRnA		TCCR2A
+#define HW_TCCRnB		TCCR2B
+#define HW_TIMERn_COMPA_vect	TIMER2_COMPA_vect
+#define HW_TCNTn		TCNT2
+#define HW_OCRnA		OCR2A
+#define HW_WGMn1		WGM21
+#define HW_CSn0			CS20
+#define HW_CSn1			CS21
+#define HW_TIMSKn		TIMSK2
+#define HW_OCIEnA		OCIE2A
+
+#elif defined( __AVR_ATmega2560__ )
+//
+//	Standard Mega 2560 configuration
+//	--------------------------------
+//
+#define HW_TITLE		"AVR ATmega2560"
+
+//
+//	SRAM = 8 KBytes
+//
+#define SELECT_SML(s,m,l)	l
+
+//
+//	Map Timer symbols onto target Timer hardware
+//
+#define HW_TCCRnA		TCCR2A
+#define HW_TCCRnB		TCCR2B
+#define HW_TIMERn_COMPA_vect	TIMER2_COMPA_vect
+#define HW_TCNTn		TCNT2
+#define HW_OCRnA		OCR2A
+#define HW_WGMn1		WGM21
+#define HW_CSn0			CS20
+#define HW_CSn1			CS21
+#define HW_TIMSKn		TIMSK2
+#define HW_OCIEnA		OCIE2A
+
+#elif defined( __AVR_ATmega4809__ )
+//
+//	Arduino Every ATmega4809 configuration
+//	--------------------------------------
+//
+#define HW_TITLE		"AVR ATmega4809"
+//
+//	SRAM = 6 KBytes
+//
+#define SELECT_SML(s,m,l)	l
+
+//
+//	This *Will Not* compile, yet.  This is due
+//	to the substancially different TWI interface.
+//
+//	Timer macros to be defined too.
+//
+#error "AVR ATmega4809 not supported yet, in development"
+
+#elif defined( __AVR_ATmega32U4__ )
+//
+//	Arduino Every ATmega32U4 configuration
+//	--------------------------------------
+//
+#define HW_TITLE		"AVR ATmega32U4"
+
+//
+//	SRAM = 2.5 KBytes
+//
+#define SELECT_SML(s,m,l)	m
+
+//
+//	Map Timer symbols onto target Timer hardware
+//
+#define HW_TCCRnA		TCCR0A
+#define HW_TCCRnB		TCCR0B
+#define HW_TIMERn_COMPA_vect	TIMER0_COMPA_vect
+#define HW_TCNTn		TCNT0
+#define HW_OCRnA		OCR0A
+#define HW_WGMn1		WGM01
+#define HW_CSn0			CS00
+#define HW_CSn1			CS01
+#define HW_TIMSKn		TIMSK0
+#define HW_OCIEnA		OCIE0A
+
+#else
+//
+//	Firmware has not been configured for this board.
+//
+#error "Firmware has not been configured for this board"
+
+#endif
 
 //
 //	Liquid Crystal Display
@@ -157,7 +268,7 @@
 //	LCD_DISPLAY_ADRS	The I2C address of the display
 //
 //	The display is assumed to be attached using a generic
-//	PCF8575 I2C to Parallel adator.  The following default
+//	PCF8575 I2C to Parallel adaptor.  The following default
 //	definitions apply to a generic 20x4 display.
 //
 #define LCD_DISPLAY_ENABLE
@@ -165,7 +276,7 @@
 #define LCD_DISPLAY_COLS	20
 #define LCD_DISPLAY_ADRS	0x27
 //
-//	Define a set of single charactrer symbols to represet
+//	Define a set of single character symbols to represent
 //	actions/directions applied to decoders/accessories when
 //	displayed on the LCD.
 //
@@ -175,9 +286,14 @@
 #define LCD_ACTION_DISABLE	'v'
 
 //
+//	Define the interval at which the LCD is updated, in milliseconds.
+//
+#define LCD_UPDATE_INTERVAL	1000
+
+//
 //	Finally, on LCDs..
 //
-//	From a wiring perspective (apart from +Vcc and Ground) the
+//	From a wiring perspective (apart from +5V and Ground) the
 //	display is attached to the Arduino Uno* via the pass-through pins
 //	D18/A4 and D19/A5 on the motor shield.  These equate to
 //	the I2C/TWI interface pins SDA (D18) and SCL (D19).  These will
@@ -211,9 +327,12 @@
 //
 //	LCD Display libraries.
 //
-#include "TWI_Lite.h"
-#include "Wire_Lite.h"
-#include "LCD_I2C_Lite.h"
+//	These are the "non-blocking" libraries developed by
+//	Jeff Penfold (jeff.penfold@googlemail.com).
+//
+
+#include "TWI_IO.h"
+#include "LCD_TWI_IO.h"
 
 #endif
 
@@ -235,7 +354,7 @@
 //	Define the size of a generic small textual buffer for
 //	use on the stack.
 //
-#define TEXT_BUFFER 8
+#define TEXT_BUFFER SELECT_SML(8,12,16)
 
 //
 //	Compatibility Support
@@ -246,10 +365,31 @@
 //	compatibility mode.
 //
 #ifdef DCC_PLUS_PLUS_COMPATIBILITY
-#define SELECT_ALT(a,b)		b
+#define SELECT_COMPAT(a,b)		b
 #else
-#define SELECT_ALT(a,b)		a
+#define SELECT_COMPAT(a,b)		a
 #endif
+
+//
+//	Boot Splash Screen
+//	==================
+//
+//	Do we want a splash screen on power up and
+//	what should it say?
+//
+//	Define SPLASH_ENABLE to include splash code,
+//	and SPLASH_LINE_1, _2, _3, _4 (as appropriate
+//	for the target display) as text string to
+//	display on boot.  Define SPLASH_WAIT as a
+//	pause period (ms) before rolling on to the
+//	the firmware.
+//
+#define SPLASH_ENABLE
+#define SPLASH_LINE_1	"DCC Generator"
+#define SPLASH_LINE_2	"Mode:" SELECT_COMPAT( "Native " SELECT_PROG( "+", "-" ) "PT", "Compat" ) " " SELECT_SML( "(S)", "(M)", "(L)" )
+#define SPLASH_LINE_3	"Model: " HW_TITLE
+#define SPLASH_LINE_4	"Date: " __DATE__
+#define SPLASH_WAIT	3000
 
 //
 //	Serial Host Connectivity
@@ -264,8 +404,8 @@
 //	PROT_IN_CHAR	Define the start and end characters of a sentence
 //	PROT_OUT_CHAR	in the target operating system mode syntax.
 //	
-#define PROT_IN_CHAR		SELECT_ALT( '[', '<' )
-#define PROT_OUT_CHAR		SELECT_ALT( ']', '>' )
+#define PROT_IN_CHAR		SELECT_COMPAT( '[', '<' )
+#define PROT_OUT_CHAR		SELECT_COMPAT( ']', '>' )
 
 //
 //	Define the Speed and buffer size used when accessing the
@@ -275,17 +415,15 @@
 //
 //		9600 14400 19200 38400 57600 115200
 //
-#define SERIAL_BAUD_RATE	SELECT_ALT( 38400, 115200 )
-#define SERIAL_BUFFER_SIZE	64
-
+#define SERIAL_BAUD_RATE	SELECT_COMPAT( 38400, 115200 )
 //
-//	Advanced declaration of the Serial Input Routines.
+//	Clear SERIAL_BUFFER_SIZE if already defined (ATmega32U4, you
+//	know who you are).
 //
-static void poll_serial_input( void );
-static byte ready_serial_input( void );
-static char read_serial_input( void );
-
-
+#ifdef SERIAL_BUFFER_SIZE
+#undef SERIAL_BUFFER_SIZE
+#endif
+#define SERIAL_BUFFER_SIZE	SELECT_SML( 64, 96, 128 )
 
 //
 //	High Level Configuration values.
@@ -313,9 +451,9 @@ static char read_serial_input( void );
 #define MINIMUM_DELTA_AMPS	35
 
 //
-//	Define the watchdog interval in milliseconds.
+//	Define the periodic interval in milliseconds.
 //
-#define WATCHDOG_INTERVAL	1000
+#define PERIODIC_INTERVAL	1000
 
 //
 //	Define the Driver/District reset period (in milliseconds)
@@ -323,7 +461,14 @@ static char read_serial_input( void );
 //	disabled as a result of a power exception (spike/overload)
 //	before a restart is attempted.
 //
-#define DRIVER_RESET_PERIOD	5000
+#define DRIVER_RESET_PERIOD	10000
+
+//
+//	Define the Driver/District phase test period.  This is the
+//	time after the firmware flips a driver/district phasing
+//	before concluding that the new phase is all OK.
+//
+#define DRIVER_PHASE_PERIOD	1000
 
 //
 //	Define the maximum number of bytes in a DCC packet that we
@@ -337,7 +482,7 @@ static char read_serial_input( void );
 #define MAXIMUM_DCC_COMMAND	6
 
 //
-//	Define the maximum number of bytes that can be accespted as
+//	Define the maximum number of bytes that can be accepted as
 //	a complete input command.
 //
 #define MAXIMUM_DCC_CMD		16
@@ -387,9 +532,15 @@ static char read_serial_input( void );
 //		A .. A+M-1	Mobile, persistent DCC packets
 //		A+M .. A+M+P-1	Programming track buffers.
 //
-#define ACCESSORY_TRANS_BUFFERS	3
-#define MOBILE_TRANS_BUFFERS	6
-#define PROGRAMMING_BUFFERS	1
+#define ACCESSORY_TRANS_BUFFERS	SELECT_SML( 3, 4, 6 )
+#define MOBILE_TRANS_BUFFERS	SELECT_SML( 6, 8, 12 )
+//
+//	Note, number of buffers for programming only valid as 1
+//	if a programming track is supported, or 0 if it is
+//	explicitly not required.
+//
+#define PROGRAMMING_BUFFERS	SELECT_PROG( 1, 0 )
+
 
 //
 //	Define short hand base buffer numbers for each section.
@@ -415,8 +566,11 @@ static char read_serial_input( void );
 //	commands and 20 for programming commands.  These are the
 //	short and long preambles.
 //
+//	I havce made the long pre-amble even longer to assist with
+//	confirmation detection.
+//
 #define DCC_SHORT_PREAMBLE	15
-#define DCC_LONG_PREAMBLE	30
+#define DCC_LONG_PREAMBLE	60
 
 //
 //	Various DCC protocol based values
@@ -469,13 +623,13 @@ static char read_serial_input( void );
 //	=========================
 //
 //	This DCC Generator firmware now supports multiple DCC
-//	Districts in addition to an noptional programming track.
+//	Districts in addition to an optional programming track.
 //
 //	This create a selection of coding, performance and optimisation
 //	challenges which are all closely related to the type and
 //	configuration of the Motor Shield installed upon the Arduino.
 //
-//	The following defintions provide the higher level guidance
+//	The following definitions provide the higher level guidance
 //	to the source code allowing alternative methods and
 //	optimisations to be selected as permitted by the installed
 //	motor shield.
@@ -499,7 +653,7 @@ static char read_serial_input( void );
 //	memory.
 //
 //	Where a brake pin is not available (specifically on the bespoke DCC
-//	arduino shield) use BRAKE_NOT_AVAILABLE as its pin value.  This will
+//	Arduino shield) use BRAKE_NOT_AVAILABLE as its pin value.  This will
 //	prevent the firmware from trying to force the pin LOW to make the
 //	pin safe.
 //
@@ -531,12 +685,18 @@ SHIELD_DRIVER {
 //	select the motor shield installed.
 //
 //	SHIELD_DEFAULT_ARDUINO	The standard (or compatible) motor shield
-//				available widly from Areduino or other
+//				available widely from Arduino or other
 //				vendors.
 //
 //	SHIELD_GENERATOR_DRIVER	The bespoke shield built specifically to
 //				support multiple (>2) DCC Districts with
 //				pin register optimised specification.
+//
+//				The table defined below for this configuration
+//				has been laid out for the DCC Driver Backplane
+//				and three DCC Driver Modules giving a
+//				total of 6 DCC Districts (or 5 + 1 programming
+//				track).
 //
 #define SHIELD_DEFAULT_ARDUINO
 //#define SHIELD_GENERATOR_DRIVER
@@ -575,8 +735,8 @@ SHIELD_DRIVER {
 //		after that.
 //
 //		Also (unlike the DCC++ firmware) this firmware
-//		requires no additional jumpers for its intended
-//		operation.
+//		requires no additional jumpers to support its
+//		intended operation.
 //
 #define SHIELD_DRIVER_A_DIRECTION	12
 #define SHIELD_DRIVER_A_ENABLE		3
@@ -597,7 +757,7 @@ SHIELD_DRIVER {
 static const SHIELD_DRIVER shield_output[ SHIELD_OUTPUT_DRIVERS ] PROGMEM = {
 	{
 		//
-		//	Main track.
+		//	Main track (main district)
 		//
 		true,
 		SHIELD_DRIVER_A_DIRECTION,
@@ -607,9 +767,9 @@ static const SHIELD_DRIVER shield_output[ SHIELD_OUTPUT_DRIVERS ] PROGMEM = {
 	},
 	{
 		//
-		//	Programming track
+		//	Programming track / Last Main Track
 		//
-		false,
+		SELECT_PROG( false, true ),
 		SHIELD_DRIVER_B_DIRECTION,
 		SHIELD_DRIVER_B_ENABLE,
 		SHIELD_DRIVER_B_BRAKE,
@@ -625,15 +785,13 @@ static const SHIELD_DRIVER shield_output[ SHIELD_OUTPUT_DRIVERS ] PROGMEM = {
 //
 #ifdef SHIELD_GENERATOR_DRIVER
 
-//	Bespoke, hand built, motor shield specifically for DCC
-//	train operation.
 //
-//	While this card has not yet been prototyped, the following
-//	definitions will apply to it:
+//	The bespoke DCC Driver Backplane and DCC Driver Module
+//	solution.
 //
-#define SHIELD_OUTPUT_DRIVERS		4
-//#define SHIELD_OUTPUT_DRIVERS		6
+#define SHIELD_OUTPUT_DRIVERS		6
 #define SHIELD_PORT_DIRECT		PORTB
+#define SHIELD_PORT_DIRECT_DIR		DDRB
 //
 #define SHIELD_DRIVER_1_DIRECTION	bit(0)
 #define SHIELD_DRIVER_1_ENABLE		2
@@ -655,17 +813,15 @@ static const SHIELD_DRIVER shield_output[ SHIELD_OUTPUT_DRIVERS ] PROGMEM = {
 #define SHIELD_DRIVER_4_LOAD		A3
 #define SHIELD_DRIVER_4_ANALOGUE	3
 //
-//	Possible extension of bespoke board to three H-Bridge ICs.
+#define SHIELD_DRIVER_5_DIRECTION	bit(4)
+#define SHIELD_DRIVER_5_ENABLE		6
+#define SHIELD_DRIVER_5_LOAD		A6
+#define SHIELD_DRIVER_5_ANALOGUE	6
 //
-//#define SHIELD_DRIVER_5_DIRECTION	bit(4)
-//#define SHIELD_DRIVER_5_ENABLE		6
-//#define SHIELD_DRIVER_5_LOAD		A4
-//#define SHIELD_DRIVER_5_ANALOGUE	4
-//
-//#define SHIELD_DRIVER_6_DIRECTION	bit(5)
-//#define SHIELD_DRIVER_6_ENABLE		7
-//#define SHIELD_DRIVER_6_LOAD		A5
-//#define SHIELD_DRIVER_6_ANALOGUE	5
+#define SHIELD_DRIVER_6_DIRECTION	bit(5)
+#define SHIELD_DRIVER_6_ENABLE		7
+#define SHIELD_DRIVER_6_LOAD		A7
+#define SHIELD_DRIVER_6_ANALOGUE	7
 //
 static const SHIELD_DRIVER shield_output[ SHIELD_OUTPUT_DRIVERS ] PROGMEM = {
 	{
@@ -700,13 +856,33 @@ static const SHIELD_DRIVER shield_output[ SHIELD_OUTPUT_DRIVERS ] PROGMEM = {
 	},
 	{
 		//
-		//	Programming track
+		//	Main track district 4
 		//
-		false,
+		true,
 		SHIELD_DRIVER_4_DIRECTION,
 		SHIELD_DRIVER_4_ENABLE,
 		BRAKE_NOT_AVAILABLE,
 		SHIELD_DRIVER_4_LOAD, SHIELD_DRIVER_4_ANALOGUE
+	},
+	{
+		//
+		//	Main track district 5
+		//
+		true,
+		SHIELD_DRIVER_5_DIRECTION,
+		SHIELD_DRIVER_5_ENABLE,
+		BRAKE_NOT_AVAILABLE,
+		SHIELD_DRIVER_5_LOAD, SHIELD_DRIVER_5_ANALOGUE
+	},
+	{
+		//
+		//	Programming track / Last Main Track
+		//
+		SELECT_PROG( false, true ),
+		SHIELD_DRIVER_6_DIRECTION,
+		SHIELD_DRIVER_6_ENABLE,
+		BRAKE_NOT_AVAILABLE,
+		SHIELD_DRIVER_6_LOAD, SHIELD_DRIVER_6_ANALOGUE
 	}
 };
 
@@ -719,7 +895,6 @@ static const SHIELD_DRIVER shield_output[ SHIELD_OUTPUT_DRIVERS ] PROGMEM = {
 
 #endif
 #endif
-
 
 //
 //	Timing, Protocol and Data definitions.
@@ -775,7 +950,7 @@ static const SHIELD_DRIVER shield_output[ SHIELD_OUTPUT_DRIVERS ] PROGMEM = {
 //	so:
 //		7 ticks of 14.5 us gives a time of 101.5 us (1.5% error).
 //
-#define TIMER_INTERRUPRT_CYCLES	232
+#define TIMER_INTERRUPT_CYCLES	232
 #define TIMER_CLOCK_PRESCALER	1
 
 #else
@@ -787,7 +962,7 @@ static const SHIELD_DRIVER shield_output[ SHIELD_OUTPUT_DRIVERS ] PROGMEM = {
 //		20 (MHz) x 14.5 (microseconds) = 290 (clock cycles)
 //
 //	This is too big for the 8 bit timer we are using, so we select
-//	the smallest available prescaller: 8
+//	the smallest available pre-scaler: 8
 //
 //		290 (clock cycles) / 8 = 36.25
 //
@@ -808,7 +983,7 @@ static const SHIELD_DRIVER shield_output[ SHIELD_OUTPUT_DRIVERS ] PROGMEM = {
 //	so:
 //		7 ticks of 14.4 us gives a time of 100.8 us (0.8% error)
 //
-#define TIMER_INTERRUPRT_CYCLES	36
+#define TIMER_INTERRUPT_CYCLES	36
 #define TIMER_CLOCK_PRESCALER	8
 
 #else
@@ -819,8 +994,8 @@ static const SHIELD_DRIVER shield_output[ SHIELD_OUTPUT_DRIVERS ] PROGMEM = {
 #error "MCU Clock speed calculation needs to be calculate for this clock rate."
 
 //
-//	The calculations outlined above need to carried out and appropiate
-//	results captured in the definitions of TIMER_INTERRUPRT_CYCLES and
+//	The calculations outlined above need to be carried out and appropriate
+//	results captured in the definitions of TIMER_INTERRUPT_CYCLES and
 //	TIMER_CLOCK_PRESCALER values.
 //
 
@@ -887,22 +1062,28 @@ static void report_error( int err, int arg );
 //
 //	Create the LCD interface object.
 //
-static LCD_I2C_Lite lcd( LCD_DISPLAY_ADRS, LCD_DISPLAY_COLS, LCD_DISPLAY_ROWS );
+static LCD_TWI_IO lcd( LCD_DISPLAY_ADRS, LCD_DISPLAY_COLS, LCD_DISPLAY_ROWS );
+
+//
+//	Allocate a static frame buffer
+//
+#define LCD_BUFFER	(LCD_DISPLAY_COLS*LCD_DISPLAY_ROWS)
+static byte lcd_buffer[ LCD_BUFFER ];
 
 //
 //	Outline description of the  LCD display
 //	---------------------------------------
 //
-//	The dimentions and field sizes for the display are set here as they
+//	The dimensions and field sizes for the display are set here as they
 //	have size implications for other data structures following.
 //
-//	The code will attempt to be compile time sensitive to the
-//	dimensions of the display (as set in LCD_DISPLAY_ROWS and _COLS)
-//	This may not result in a pleasing/balanced display in all cases.
+//	The code will compile itself to match the dimensions of the display
+//	(as set in LCD_DISPLAY_ROWS and _COLS).  This may not result in a
+//	pleasing/balanced display in all cases.
 //
-//	The code has been organised to target a 20 column by 4 row display.
+//	The code has been optimised to target a 20 column by 4 row display.
 //
-//	A "drawing" of the target output display:
+//	A drawing of the target output display:
 //
 //	+--------------------+	The STATUS area of the display, showing:
 //	|SSSSSS              |	The highest district power (L)oad
@@ -927,7 +1108,7 @@ static LCD_I2C_Lite lcd( LCD_DISPLAY_ADRS, LCD_DISPLAY_COLS, LCD_DISPLAY_ROWS );
 //
 //	The following definitions define some parameters which
 //	shape the output ot the LCD.  The fixed values here should
-//	not be modified unless the appropiate code is adjusted
+//	not be modified unless the appropriate code is adjusted
 //	accordingly.
 //
 #define LCD_DISPLAY_STATUS_WIDTH	6
@@ -954,7 +1135,7 @@ static LCD_I2C_Lite lcd( LCD_DISPLAY_ADRS, LCD_DISPLAY_COLS, LCD_DISPLAY_ROWS );
 
 //
 //	Define the data structure used to hold a single pending
-//	DCC packet.  The field defined are:
+//	DCC packet.  The fields defined are:
 //
 //	target		The new value for target upon setting up a new
 //			bit stream.
@@ -1140,7 +1321,7 @@ static int internal_acc_subadrs( int target ) {
 //
 
 //
-//	Define a number of cache records and bytes for bits storage in
+//	Define a number of cache records and bytes for bit storage in
 //	each record.  We calculate FUNCTION_BIT_ARRAY based on the
 //	MIN and MAX function numbers provided (the 7+ ensures correct
 //	rounding in boundary cases).
@@ -1149,10 +1330,10 @@ static int internal_acc_subadrs( int target ) {
 //	DCC mobile decoders we can have active in parallel.
 //
 #define FUNCTION_CACHE_RECS	MOBILE_TRANS_BUFFERS
-#define FUNCTION_BIT_ARRAY	((7+1+MAX_FUNCTION_NUMBER-MIN_FUNCTION_NUMBER)>>3)
+#define FUNCTION_BIT_ARRAY	((( 1 + MAX_FUNCTION_NUMBER - MIN_FUNCTION_NUMBER )+7 ) >> 3 )
 
 //
-//	The structure used to cache function values per decoder, so that
+//	The structure used to cache function values per decoder so that
 //	the "block" function setting DCC packet can be used.
 //
 #define FUNCTION_CACHE struct func_cache
@@ -1387,14 +1568,14 @@ static byte get_function( int target, byte func, byte val ) {
 //	Statistically this would normally hold a larger DCC packet than
 //	this.
 //
-#define BIT_TRANSITIONS		40
+#define BIT_TRANSITIONS		SELECT_SML( 36, 48, 64 )
 
 //
 //	Define maximum bit iterations per byte of the bit transition array.
 //
 //	It is possible to prove that this figure can never be reached as this
 //	would imply a a series of 28 byte containing just 0 bits which (apart
-//	from being an invalid DCC command, is over 4 time longer than the
+//	from being an invalid DCC command, is over 4 times longer than the
 //	longest DCC command this code will handle.
 //
 //	This value is applied inside verification assert statements.
@@ -1495,7 +1676,7 @@ static byte get_function( int target, byte func, byte val ) {
 //
 //	pending		Address of the pending data record containing the next
 //			command to load after this one is completed.  There is
-//			an implication that if durations is 0 then this must
+//			an implication that if duration is 0 then this must
 //			be NULL.
 //
 //	Confirmation reply data.
@@ -1553,7 +1734,7 @@ TRANS_BUFFER {
 	//
 	//	The target ID of the packet.  Note the following usage:
 	//
-	//		target < 0	Accessory Decoder (negate to get  ext ID)
+	//		target < 0	Accessory Decoder (negate to get ID)
 	//		target == 0	Broadcast address
 	//		target > 0	Mobile Decoder
 	//
@@ -1618,13 +1799,15 @@ TRANS_BUFFER {
 //	has been compiled in.
 //
 
-#if defined( DEBUG_STATISTICS )| defined( LCD_DISPLAY_ENABLE )
+#ifdef LCD_DISPLAY_ENABLE
 
-static int	statistic_packets;
+static int	lcd_statistic_packets;
 
 #endif
+
 #ifdef DEBUG_STATISTICS
 
+static int	statistic_packets;
 static int	statistic_power;
 static long	statistic_looping;	// This value grows too fast for an int.
 
@@ -1646,7 +1829,7 @@ static long	statistic_looping;	// This value grows too fast for an int.
 //	characters of data that are awaiting an opportunity to be sent
 //	to the host computer.
 //
-#define OUTPUT_QUEUE_SIZE	64
+#define OUTPUT_QUEUE_SIZE	SELECT_SML( 64, 96, 128 )
 
 //
 //	Define the output queue itself.  This is a
@@ -1867,16 +2050,18 @@ static void queue_bit_buffer( TRANS_BUFFER *ptr ) {
 	//	We will output this directly because it's
 	//	too big to go through the output buffer and
 	//	it should not be enabled in anything other
-	//	than a manual debugging context.
+	//	than a manual debugging context (i.e. manually
+	//	typing command into the firmware and confirming
+	//	the results returned).
 	//
 	Serial.print( '[' );
 	Serial.print( ptr->state );
 	Serial.print( ',' );
 	Serial.print( ptr->target );
 	Serial.print( ',' );
-	Serial.print( ptr->track );
-	Serial.print( ',' );
 	Serial.print( ptr->duration );
+	Serial.print( ',' );
+	Serial.print( ptr->contains );
 	Serial.println( ']' );
 }
 
@@ -1965,12 +2150,17 @@ static TRANS_BUFFER	*current;
 
 //
 //	We are controlling the output signal using direct port
-//	and bitmap control.  We define a variable which holds one
-//	side of the output pattern (the other being zero) so that
+//	and bitmap control.  We define a pair of variables which
+//	each hold one side of the output pattern so that
 //	the Interrupt Service Routine has a simple task flipping
 //	all direction pins on/off as quickly as possible.
 //
-static volatile byte	output_mask;
+//	output_mask_on		bit mask for "in phase" pins
+//
+//	output_mask_off		bit mask for "anti-phase" pins
+//
+static volatile byte	output_mask_on,
+			output_mask_off;
 
 #else
 
@@ -1979,15 +2169,21 @@ static volatile byte	output_mask;
 //	a short array (with associated length) of the pin numbers
 //	which need to be flipped.
 //
+//	output_pin		The individual pin numbers
+//
+//	output_phase		"in phase" or "anti-phase"
+//
+//	output_pins		Number of pins being controlled
+//
 static byte		output_pin[ SHIELD_OUTPUT_DRIVERS ];
-static volatile byte	output_pins;
+static bool		output_phase[ SHIELD_OUTPUT_DRIVERS ];
+static byte		output_pins;
 
 #endif
 
 //
 //	"side" flips between true and false and lets the routine know
-//	which "side" of the signal was being generated.  Used as input
-//	to "SET_DIRECTION()" in the creation of the output signal.
+//	which "side" of the signal was being generated.
 //
 static byte		side;
 
@@ -2055,7 +2251,7 @@ static byte dcc_filler_data[] = {
 //
 //	The Interrupt Service Routine which generate the DCC signal.
 //
-ISR( TIMER2_COMPA_vect ) {
+ISR( HW_TIMERn_COMPA_vect ) {
 	//
 	//	The interrupt routine should be as short as possible, but
 	//	in this case the necessity to drive forwards the output
@@ -2078,23 +2274,52 @@ ISR( TIMER2_COMPA_vect ) {
 
 #ifdef SHIELD_PORT_DIRECT
 		//
+		//	Code supporting the DCC Generator Driver hardware accessed
+		//	via a single port variable:
+		//
 		//	We flip all pins in the port according to the value of 'side'.
 		//
-		SHIELD_PORT_DIRECT = side? output_mask: 0;
+		//	The in/out phase (as a result of auto-phase adjustment) are all
+		//	handled by modifying the values found in output_mask_on and
+		//	output_mask_off.
+		//
+		SHIELD_PORT_DIRECT = side? output_mask_on: output_mask_off;
 #else
+		//
+		//	Code supporting the Arduino Motor Shield hardware where
+		//	all pins need to individually flipped.
+		//
+		//	The data necessary to do the task is gathered into the two
+		//	arrays output_pin[] (containing the actual pin numbers to
+		//	change) and output_phase[] which details if the pin is in/out of
+		//	phase.  output_pins gives the number of pins which are captured
+		//	in these arrays.
+		//
 		{
 			//
 			//	We run through the array as fast as possible.
 			//
 			register byte *op, oc;
+			register bool *ob;
 
 			op = output_pin;
 			oc = output_pins;
+			ob = output_phase;
+			//
+			//	Replicated code is used to remove unnecessary computation
+			//	from inside the loop to maximise speed through the pin
+			//	adjustments.
+			//
+			//	Question: Can we remove the "?:" code and use the boolean
+			//	value in the output_phase array directly?  Maybe, but not yet.
+			//
+			//	Use side to select broad logic choice..
+			//
 			if( side ) {
-				while( oc-- ) digitalWrite( *op++, HIGH );
+				while( oc-- ) digitalWrite( *op++, ( *ob++? HIGH: LOW ));
 			}
 			else {
-				while( oc-- ) digitalWrite( *op++, LOW );
+				while( oc-- ) digitalWrite( *op++, ( *ob++? LOW: HIGH ));
 			}
 		}
 #endif
@@ -2141,13 +2366,17 @@ ISR( TIMER2_COMPA_vect ) {
 					//
 					current = current->next;
 
-#if defined( DEBUG_STATISTICS )| defined( LCD_DISPLAY_ENABLE )
-
+#ifdef DEBUG_STATISTICS
 					//
-					//	Count a successful packet transmission
+					//	Count a successful packet transmission for debugging
 					//
 					statistic_packets++;
-
+#endif
+#ifdef LCD_DISPLAY_ENABLE
+					//
+					//	Count a successful packet transmission fro LCD display
+					//
+					lcd_statistic_packets++;
 #endif
 
 					//
@@ -2168,8 +2397,8 @@ ISR( TIMER2_COMPA_vect ) {
 							//
 							//	We have been asked to drop this buffer
 							//	so we output an idle packet while changing
-							//	state of buffer to LOAD so the manager can
-							//	deal with it.
+							//	the state of buffer to LOAD so the manager
+							//	can deal with it.
 							//
 							bit_string = dcc_idle_packet;
 							current->state = TBS_LOAD;
@@ -2220,13 +2449,14 @@ ISR( TIMER2_COMPA_vect ) {
 		remaining = reload;
 	}
 	//
-	//	In ALL cases this routine needs to complete in less than TIMER_INTERRUPRT_CYCLES
-	//	(currently 232 for a 16 MHz machine).  This is approximately 100 actual
-	//	instructions (assuming most instructions take 2 cycle with some taking 3).
+	//	In ALL cases this routine needs to complete in less than TIMER_INTERRUPT_CYCLES
+	//	(currently 232 for a 16 MHz machine).  This is (huge guestimation) approximately
+	//	100 actual instructions (assuming most instructions take 1 cycle with some taking
+	//	2 or 3).
 	//
 	//	The above code, on the "longest path" through the code (when moving
 	//	between transmission buffers) I am estimating that this uses no more
-	//	than 80% of this window (crosses fingers, it is tight in the worst case).
+	//	than 50 to 75% of this window.
 	//
 	//	This routine would be so much better written in assembler when deployed
 	//	on an AVR micro-controller, however this C does work and produces the
@@ -2388,7 +2618,7 @@ static bool pack_command( byte *cmd, byte clen, bool long_preamble, byte *buf ) 
 //	This has been done to reduce memory usage from the sprintf
 //	template strings in exchange for a larger code base (as
 //	there is plenty of code flash available but memory is
-//	tight).
+//	tight on the smaller MCUs).
 //
 
 static char *_reply_in( char *buf, char code ) {
@@ -2425,6 +2655,7 @@ static void reply_2( char *buf, char code, int a1, int a2 ) {
 }
 
 #ifndef DCC_PLUS_PLUS_COMPATIBILITY
+#ifdef PROGRAMMING_TRACK
 
 static void reply_2c( char *buf, char code, int a1, int a2 ) {
 	buf = _reply_in( buf, code );
@@ -2433,6 +2664,18 @@ static void reply_2c( char *buf, char code, int a1, int a2 ) {
 	buf = int_to_text( buf, a2 );
 	buf = _reply_char( buf, SPACE );
 	buf = _reply_char( buf, HASH );
+	buf = _reply_out( buf );
+	*buf = EOS;
+}
+
+#endif
+
+static void reply_n( char *buf, char code, int n, int *a ) {
+	buf = _reply_in( buf, code );
+	while( n-- ) {
+		buf = int_to_text( buf, *a++ );
+		if( n ) buf = _reply_char( buf, SPACE );
+	}
 	buf = _reply_out( buf );
 	*buf = EOS;
 }
@@ -2466,7 +2709,7 @@ static void reply_3( char *buf, char code, int a1, int a2, int a3 ) {
 //	Define a list of Error numbers that this code could report
 //
 //	Note:	Probably ought to re-group these numbers into sections
-//		so adding a new error number is less disrutive.
+//		so adding a new error number is less disruptive.
 //
 #define NO_ERROR		0
 #define ERROR_QUEUE_OVERFLOW	1
@@ -2491,13 +2734,14 @@ static void reply_3( char *buf, char code, int a1, int a2, int a3 ) {
 #define TRANSMISSION_BUSY	20
 #define COMMAND_QUEUE_FAILED	21
 #define POWER_NOT_OFF		22
-#define POWER_OVERLOAD		23
-#define POWER_SPIKE		24
+#define NO_PROGRAMMING_TRACK	23
+#define POWER_OVERLOAD		24
+#define POWER_SPIKE		25
 
 //
 //	Define a short queue of errors which are pending transmission
 //
-#define ERROR_QUEUE_SIZE	5
+#define ERROR_QUEUE_SIZE	SELECT_SML( 5, 7, 15 )
 
 //
 //	Define the type used to store a single error report.
@@ -2614,7 +2858,7 @@ static void flush_error_queue( void ) {
 		//	is enough space.
 		//
 		e = &( error_queue[ error_out ]);
-		reply_2( buffer, SELECT_ALT( 'E', '#' ), e->err, e->arg );
+		reply_2( buffer, SELECT_COMPAT( 'E', '#' ), e->err, e->arg );
 		//
 		//	Can we send this?
 		//
@@ -2665,30 +2909,44 @@ static void flush_error_queue( void ) {
 //	reduced from 10 bits to an 8 bit value (right shifted two
 //	digits).
 //
-//	compound_value:	The array of (8 bit scaled) compound average
-//			values for the specified driver.
+//	compound_value:	The array of compound average values for the
+//			specified driver.
 //
-//	restart:	If non-zero then this driver has been temporarily
-//			disabled due to a power condition (short/overload)
-//			and will be restarted once the restart time has
-//			passed.
+//	status:		Enumeration representing the current status of
+//			the driver.  The status values are:
 //
+//			DRIVER_ON	Output is good, nothing to do.
+//			DRIVER_FLIPPED	Output phase has been swapped,
+//					recheck has been set.  If nothing
+//					changes by recheck time then move
+//					driver back to DRIVER_ON.
+//			DRIVER_OFF	Output is disabled and will be
+//					retried at recheck time.
+//			DRIVER_DISABLED	This driver is not currently being
+//					used for the creation of a DCC
+//					signal.
+//
+//	recheck:	If non-zero then this driver has been modified
+//			in response to a power condition.  This is the
+//			"future time" at which this needs to be reviewed.
+//
+#define DRIVER_STATUS enum driver_status
+DRIVER_STATUS {
+	DRIVER_ON,
+	DRIVER_FLIPPED,
+	DRIVER_OFF,
+	DRIVER_DISABLED
+};
 #define DRIVER_LOAD struct driver_load
 DRIVER_LOAD {
-	byte		compound_value[ COMPOUNDED_VALUES ];
-	unsigned long	restart;
+	word		compound_value[ COMPOUNDED_VALUES ];
+	DRIVER_STATUS	status;
+	unsigned long	recheck;
+	
+#ifdef DEBUG_POWER_MONITOR
+	int		old_amps;
+#endif
 };
-
-//
-//	Create simple macro to re-scale the load value provided
-//	and any constant values provided at the head of the source
-//	code.
-//
-#define RESCALE_LOAD_VALUE(l)	((l)>>2)
-//
-//	... and the opposite.
-//
-#define UNSCALE_LOAD_VALUE(l)	((l)<<2)
 
 //
 //	Define the array of structures used to track each of the
@@ -2697,7 +2955,7 @@ DRIVER_LOAD {
 static DRIVER_LOAD	output_load[ SHIELD_OUTPUT_DRIVERS ];
 
 //
-//	Keep and index into the output_load array so that each of
+//	Keep an index into the output_load array so that each of
 //	the drivers can have its load assessed in sequence.
 //
 static byte		output_index;
@@ -2728,7 +2986,11 @@ static void init_driver_load( void ) {
 		for( byte c = 0; c < COMPOUNDED_VALUES; c++ ) {
 			output_load[ d ].compound_value[ c ] = 0;
 		}
-		output_load[ d ].restart = 0;
+		output_load[ d ].status = DRIVER_ON;
+		output_load[ d ].recheck = 0;
+#ifdef DEBUG_POWER_MONITOR
+		output_load[ d ].old_amps = 0;
+#endif
 	}
 	//
 	//	Start checking current on the first driver.
@@ -2737,20 +2999,49 @@ static void init_driver_load( void ) {
 }
 
 //
-//	Routine called by the power managment code to "clear"
-//	any temporary district/driver reset timeouts as the
-//	power code is about to make wholesale changes to
-//	what is powered on and off.
+//	In native mode we update the host computer with the district status
+//	as changes occur.  This is the routine used to do that.
 //
-static void clear_driver_restarts( void ) {
-	for( byte d = 0; d < SHIELD_OUTPUT_DRIVERS; output_load[ d++ ].restart = 0 );
+static void report_driver_status( void ) {
+#ifndef DCC_PLUS_PLUS_COMPATIBILITY
+	//
+	//	Actually only do this in Native mode.
+	//
+	char	buffer[ 4 + SHIELD_OUTPUT_DRIVERS * 2 ];
+	int	v[ SHIELD_OUTPUT_DRIVERS ];
+
+	for( byte i = 0; i < SHIELD_OUTPUT_DRIVERS; i++ ) {
+		switch( output_load[ i ].status ) {
+			case DRIVER_ON: {
+				v[ i ] = 1;
+				break;
+			}
+			case DRIVER_FLIPPED: {
+				v[ i ] = 2;
+				break;
+			}
+			case DRIVER_OFF: {
+				v[ i ] = 3;
+				break;
+			}
+			default: {
+				v[ i ] = 0;
+				break;
+			}
+		}
+	}
+	reply_n( buffer, 'D', SHIELD_OUTPUT_DRIVERS, v );
+	if( !queue_output( buffer )) report_error( COMMAND_REPORT_FAIL, 'D' );
+#endif
 }
 
 //
 //	This routine is called every time track electrical load data
-//	becomes available.  The routine serves two purposes:
+//	becomes available.  The routine serves several purposes:
 //
 //		Monitor for overload and spike conditions
+//
+//		Manage the phase flipping protocol
 //
 //		Detect return signals from devices attached
 //		to the DCC bus.
@@ -2758,60 +3049,115 @@ static void clear_driver_restarts( void ) {
 static void monitor_current_load( unsigned long now, int amps ) {
 	DRIVER_LOAD	*dp;
 
-#ifdef DEBUG_POWER_MONITOR
-	Serial.print( "AMPS=" );
-	Serial.println( amps );
-#endif
-
 	//
 	//	set shortcut pointer into the output_load[] array.
 	//
 	dp = &( output_load[ output_index ]);
 
 	//
-	//	Rescale the presented reading from 10 to 8 bits.
-	//
-	amps = RESCALE_LOAD_VALUE( amps );
-
-	//
 	//	Compound in the new figure.
 	//
-	for( byte i = 0; i < COMPOUNDED_VALUES; i++ ) {
-		//
-		//	This needs to be careful, as the intermediate addition will often exceed
-		//	the 8 bit value, so the actual calculation still needs to be performed in
-		//	at least 16 bits.
-		//
-		amps = ( amps + (int)( dp->compound_value[ i ])) >> 1;
-		dp->compound_value[ i ] = (byte)amps;
+	for( byte i = 0; i < COMPOUNDED_VALUES; i++ ) amps = dp->compound_value[ i ] = ( amps + dp->compound_value[ i ]) >> 1;
+
+#ifdef DEBUG_POWER_MONITOR
+	if( amps != dp->old_amps ) {
+		dp->old_amps = amps;
+
+		Serial.print( "AMPS " );
+		Serial.print( output_index );
+		Serial.print( "=" );
+		Serial.print( amps );
+		for( byte i = 0; i < COMPOUNDED_VALUES; i++ ) {
+			Serial.print( " " );
+			Serial.print( dp->compound_value[ i ]);
+		}
+		Serial.println();
 	}
+#endif
 
 	//
 	//	Is there a power spike?
 	//
-	if( dp->compound_value[ 1 ] > RESCALE_LOAD_VALUE( INSTANT_CURRENT_LIMIT )) {
+	if( dp->compound_value[ 1 ] >  INSTANT_CURRENT_LIMIT ) {
 		//
-		//	No question - cut the power to this driver now.
+		//	This is a (more or less) instantaineous current overload.
 		//
-		digitalWrite( pgm_read_byte( &( shield_output[ output_index ].enable )), LOW );
+		//	What we do now is dependent on the status of driver..
 		//
-		//	We flatten the power averaging data to simplify
-		//	power up restarting and schedule the restart.
-		//
-		for( byte i = 0; i < COMPOUNDED_VALUES; dp->compound_value[ i++ ] = 0 );
-		dp->restart = now + DRIVER_RESET_PERIOD;
-		//
-		//	Now, log an error to give the reason for
-		//	cutting the power.
-		//
-		report_error( POWER_SPIKE, output_index );
+		switch( dp->status ) {
+			case DRIVER_ON: {
+				//
+				//	If we are in "normal" running mode, we try inverting
+				//	the phase of the output to see if this fixes the
+				//	problem.
+				//
+#ifdef SHIELD_PORT_DIRECT
+				byte	mask;
+
+				//
+				//	For a direct port accessed we simply "flip" the corresponding
+				//	bits in the output_mask_on and output_mask_off bit masks, once
+				//	we have worked out which bit to flip.
+				//
+				mask = pgm_read_byte( &( shield_output[ output_index ].direction ));
+				output_mask_on ^= mask;
+				output_mask_off ^= mask;
+#else
+				//
+				//	For an Arduino motor shield solution we have to look through the
+				//	output_pin[] array to find the right element then simply invert
+				//	the corresponding output_phase[] value.
+				//
+				for( byte i = 0; i < output_pins; i++ ) {
+					if( output_pin[ i ] == output_index ) {
+						output_phase[ i ] ^= true;
+						break;
+					}
+				}
+#endif
+				dp->status = DRIVER_FLIPPED;
+				dp->recheck = now + DRIVER_PHASE_PERIOD;
+				break;
+			}
+			case DRIVER_FLIPPED: {
+				//
+				//	If we get here then the power condition has persisted, and we conclude
+				//	that the cause of the problem is not phase related, so we shut down the
+				//	driver.
+				//
+				digitalWrite( pgm_read_byte( &( shield_output[ output_index ].enable )), LOW );
+				//
+				//	We flatten the power averaging data to simplify
+				//	power up restarting and schedule the restart.
+				//
+				for( byte i = 0; i < COMPOUNDED_VALUES; dp->compound_value[ i++ ] = 0 );
+				//
+				//	Note changes in status and schedule re checking status.
+				//
+				dp->status = DRIVER_OFF;
+				dp->recheck = now + DRIVER_RESET_PERIOD;
+				//
+				//	Now, log an error to give the reason for
+				//	cutting the power.
+				//
+				report_error( POWER_SPIKE, output_index );
+				break;
+			}
+			default: {
+				//
+				//	Should not happen!
+				//
+				ASSERT( false );
+				break;
+			}
+		}
+		report_driver_status();
 	}
 	else {
-
 		//
-		//	Has there been a big enough jump compared a short term average?
+		//	Has the long term level of power drain exceeded our ceiling value?
 		//
-		if( dp->compound_value[ COMPOUNDED_VALUES - 1 ] > RESCALE_LOAD_VALUE( AVERAGE_CURRENT_LIMIT )) {
+		if( dp->compound_value[ COMPOUNDED_VALUES - 1 ] >  AVERAGE_CURRENT_LIMIT ) {
 			//
 			//	Cut the power here because there is some sort of long
 			//	term higher power drain.
@@ -2822,23 +3168,90 @@ static void monitor_current_load( unsigned long now, int amps ) {
 			//	power up restarting and schedule the restart.
 			//
 			for( byte i = 0; i < COMPOUNDED_VALUES; dp->compound_value[ i++ ] = 0 );
-			dp->restart = now + DRIVER_RESET_PERIOD;
+			//
+			//	Note what we have done and schedule rechecking
+			//
+			dp->status = DRIVER_OFF;
+			dp->recheck = now + DRIVER_RESET_PERIOD;
 			//
 			//	Report error/action to host computer
 			//
 			report_error( POWER_OVERLOAD, amps );
+			report_driver_status();
 		}
 		else {
+			word	a, b;
 
+			//
+			//	So nothing "abnormal" has happened, so we carry out two tasks:
+			//
+			//	First:
+			//
 			//	We now assess if there has been a "jump" in the current draw
 			//	which would indicate a confirmation signal being sent back
 			//	from an attached decoder.
 			//
-			if(( dp->compound_value[ SHORT_AVERAGE_VALUE ] - dp->compound_value[ COMPOUNDED_VALUES-1 ]) > RESCALE_LOAD_VALUE( MINIMUM_DELTA_AMPS )) {
+			//	Before we check out the different between the short term average
+			//	and the long term average, we should check that it is actually
+			//	larger than the long term average.
+			//
+			if(( a = dp->compound_value[ SHORT_AVERAGE_VALUE ]) > ( b = dp->compound_value[ COMPOUNDED_VALUES-1 ])) {
+				if(( a - b ) > MINIMUM_DELTA_AMPS ) {
+					//
+					//	We believe that we have seen a confirmation.
+					//
+					load_confirmed = true;
+				}
+			}
+			//
+			//	Second:
+			//
+			//	We check to see if there is a recheck event pending, and act
+			//	accordingly.
+			//
+			if( dp->recheck && ( now > dp->recheck )) {
 				//
-				//	We believe that we have seen a confirmation.
+				//	What we do is based on the drivers status.
 				//
-				load_confirmed = true;
+				switch( dp->status ) {
+					case DRIVER_FLIPPED: {
+						//
+						//	If we get here then the phase flip worked
+						//	so we change nothing and reset the status
+						//	and recheck values.
+						//
+						dp->status = DRIVER_ON;
+						dp->recheck = 0;
+						break;
+					}
+					case DRIVER_OFF: {
+						//
+						//	Getting here means its time to restart a driver
+						//	after being tunred off for a period of time.
+						//
+						//	Turn on output.
+						//
+						digitalWrite( pgm_read_byte( &( shield_output[ output_index ].enable )), HIGH );
+						//
+						//	reset status etc.
+						//
+						dp->status = DRIVER_ON;
+						dp->recheck = 0;
+						break;
+					}
+					default: {
+						//
+						//	Should not get here
+						//
+						//	HOWEVER - we DO get here if the firmware is running against
+						//	hardware which does NOT exist.  In this case the sensor ADC
+						//	seems to return random values.
+						//
+						ASSERT( false );
+						break;
+					}
+				}
+				report_driver_status();
 			}
 		}
 	}
@@ -2855,25 +3268,7 @@ static void monitor_current_load( unsigned long now, int amps ) {
 }
 
 //
-//	Routine called by the watchdog to attempt restart of power
-//	districts/driver currently suspended.
-//
-static void restart_suspended_drivers( unsigned long now ) {
-	for( byte i = 0; i < SHIELD_OUTPUT_DRIVERS; i++ ) {
-		DRIVER_LOAD *dp = &( output_load[ i ]);
-
-		if( dp->restart &&( now >= dp->restart )) {
-			//
-			//	Try restarting this driver/district.
-			//
-			dp->restart = 0;
-			digitalWrite( pgm_read_byte( &( shield_output[ output_index ].enable )), HIGH );
-		}
-	}
-}
-
-//
-//	Routine called by the watchdog timer code to report
+//	Routine called by the periodic timer code to report
 //	track power dynamically.
 //
 static void report_track_power( void ) {
@@ -2887,9 +3282,8 @@ static void report_track_power( void ) {
 		int t = output_load[ i ].compound_value[ COMPOUNDED_VALUES-1 ];
 		if( t > last_highest_power ) last_highest_power = t;
 	}
-	last_highest_power = UNSCALE_LOAD_VALUE( last_highest_power );
-	reply_1( buffer, SELECT_ALT( 'L', 'a' ), last_highest_power );
-	if( !queue_output( buffer )) report_error( COMMAND_REPORT_FAIL, SELECT_ALT( 'L', 'a' ));
+	reply_1( buffer, SELECT_COMPAT( 'L', 'a' ), last_highest_power );
+	if( !queue_output( buffer )) report_error( COMMAND_REPORT_FAIL, SELECT_COMPAT( 'L', 'a' ));
 }
 
 //
@@ -2932,11 +3326,6 @@ static byte power_on_main_track( void ) {
 	POWER_STATE	prev;
 
 	prev = global_power_state;
-
-	//
-	//	clear out any "in progress" district/driver restarts
-	//
-	clear_driver_restarts();
 	
 #ifdef SHIELD_PORT_DIRECT
 	{
@@ -2950,13 +3339,20 @@ static byte power_on_main_track( void ) {
 		//	any intermediate values.  This ensures that the ISR
 		//	only ever sees valid and complete bit masks.
 		//
-		output_mask = new_mask = 0;
+		//	When we power on the track we assume *all* districts are
+		//	in "forward" mode (all the same phase) so output_mask_on
+		//	contains all "1"s and output_mask_off "0"s.  If a phase
+		//	change condition is detected the distict impacted will move
+		//	its "1" from _on to _off (or the otherway).
+		//
+		output_mask_on = output_mask_off = new_mask = 0;
 		for( byte i = 0; i < SHIELD_OUTPUT_DRIVERS; i++ ) {
 			if( pgm_read_byte( &( shield_output[ i ].main ))) {
 				//
 				//	Enable the specific operating track driver..
 				//
 				digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), HIGH );
+				output_load[ i ].status = DRIVER_ON;
 				//
 				//	Add the pin to the mask
 				//
@@ -2967,9 +3363,17 @@ static byte power_on_main_track( void ) {
 				//	Disable the specific programming track driver.
 				//
 				digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), LOW );
+				output_load[ i ].status = DRIVER_DISABLED;
 			}
+			//
+			//	Clear load array.
+			//
+			for( byte j = 0; j < COMPOUNDED_VALUES; j++ ) {
+				output_load[ i ].compound_value[ j ] = 0;
+			}
+			output_load[ i ].recheck = 0;
 		}
-		output_mask = new_mask;
+		output_mask_on = new_mask;
 	}
 #else
 	{
@@ -2983,12 +3387,17 @@ static byte power_on_main_track( void ) {
 				//	Enable the specific operating track driver..
 				//
 				digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), HIGH );
+				output_load[ i ].status = DRIVER_ON;
 				//
 				//	Add the direction pin to the output array..
 				//
 				output_pin[ output_pins ] = pgm_read_byte( &( shield_output[ i ].direction ));
 				//
-				//	..and then (after updating the array) increase the pin count.
+				//	Kick off in the "normal" phase alignment.
+				//
+				output_phase[ output_pins ] = true;
+				//
+				//	..and then (after updating the arrays) increase the pin count.
 				//
 				output_pins++;
 			}
@@ -2997,11 +3406,19 @@ static byte power_on_main_track( void ) {
 				//	Disable the specific programming track driver.
 				//
 				digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), LOW );
+				output_load[ i ].status = DRIVER_DISABLED;
 			}
+			//
+			//	Clear load array.
+			//
+			for( byte j = 0; j < COMPOUNDED_VALUES; j++ ) {
+				output_load[ i ].compound_value[ j ] = 0;
+			}
+			output_load[ i ].recheck = 0;
 		}
 	}
 #endif
-
+	report_driver_status();
 	global_power_state = GLOBAL_POWER_MAIN;
 	return( prev != GLOBAL_POWER_MAIN );
 }
@@ -3014,49 +3431,49 @@ static byte power_on_main_track( void ) {
 //
 
 #ifndef DCC_PLUS_PLUS_COMPATIBILITY
+#ifdef PROGRAMMING_TRACK
 
 static byte power_on_prog_track( void ) {
 	POWER_STATE	prev;
 
 	prev = global_power_state;
 
-	//
-	//	clear out any "in progress" district/driver restarts
-	//
-	clear_driver_restarts();
-	
 #ifdef SHIELD_PORT_DIRECT
 	{
 		byte	new_mask;
 		
 		//
-		//	Rebuild the output mask to reflect the new output
-		//	pin mask.  We "buffer" the change to the output_mask
-		//	value to ensure that it moves directly from its old value
-		//	to zero then to its completed new value without containing
-		//	any intermediate values.  This ensures that the ISR
-		//	only ever sees valid and complete bit masks.
+		//	Same code as the above.
 		//
-		output_mask = new_mask = 0;
+		output_mask_on = output_mask_off = new_mask = 0;
 		for( byte i = 0; i < SHIELD_OUTPUT_DRIVERS; i++ ) {
 			if( pgm_read_byte( &( shield_output[ i ].main ))) {
 				//
 				//	Disable the specific operating track driver.
 				//
 				digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), LOW );
+				output_load[ i ].status = DRIVER_DISABLED;
 			}
 			else {
 				//
 				//	Enable the specific programming track driver..
 				//
 				digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), HIGH );
+				output_load[ i ].status = DRIVER_ON;
 				//
 				//	Add the pin to the mask
 				//
 				new_mask |= pgm_read_byte( &( shield_output[ i ].direction ));
 			}
+			//
+			//	Clear load array.
+			//
+			for( byte j = 0; j < COMPOUNDED_VALUES; j++ ) {
+				output_load[ i ].compound_value[ j ] = 0;
+			}
+			output_load[ i ].recheck = 0;
 		}
-		output_mask = new_mask;
+		output_mask_on = new_mask;
 	}
 #else
 	{
@@ -3070,29 +3487,43 @@ static byte power_on_prog_track( void ) {
 				//	Disable the specific operating track driver.
 				//
 				digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), LOW );
+				output_load[ i ].status = DRIVER_DISABLED;
 			}
 			else {
 				//
 				//	Enable the specific programming track driver..
 				//
 				digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), HIGH );
+				output_load[ i ].status = DRIVER_ON;
 				//
 				//	Add the direction pin to the output array..
 				//
 				output_pin[ output_pins ] = pgm_read_byte( &( shield_output[ i ].direction ));
 				//
-				//	..and then (after updating the array) increase the pin count.
+				//	Kick off in the "normal" phase alignment.
+				//
+				output_phase[ output_pins ] = true;
+				//
+				//	..and then (after updating the arrays) increase the pin count.
 				//
 				output_pins++;
 			}
+			//
+			//	Clear load array.
+			//
+			for( byte j = 0; j < COMPOUNDED_VALUES; j++ ) {
+				output_load[ i ].compound_value[ j ] = 0;
+			}
+			output_load[ i ].recheck = 0;
 		}
 	}
 #endif
-
+	report_driver_status();
 	global_power_state = GLOBAL_POWER_PROG;
 	return( prev != GLOBAL_POWER_PROG );
 }
 
+#endif
 #endif
 
 //
@@ -3105,16 +3536,12 @@ static byte power_off_tracks( void ) {
 
 	prev = global_power_state;
 	
-	//
-	//	clear out any "in progress" district/driver restarts
-	//
-	clear_driver_restarts();
-	
 #ifdef SHIELD_PORT_DIRECT
 	//
 	//	Clear the output pin mask.
 	//
-	output_mask = 0;
+	output_mask_on = 0;
+	output_mask_off = 0;
 #else
 	//
 	//	Mark the output pin array as empty.
@@ -3122,8 +3549,15 @@ static byte power_off_tracks( void ) {
 	output_pins = 0;
 #endif
 
-	for( byte i = 0; i < SHIELD_OUTPUT_DRIVERS; i++ ) digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), LOW );
-
+	for( byte i = 0; i < SHIELD_OUTPUT_DRIVERS; i++ ) {
+		digitalWrite( pgm_read_byte( &( shield_output[ i ].enable )), LOW );
+		for( byte j = 0; j < COMPOUNDED_VALUES; j++ ) {
+			output_load[ i ].compound_value[ j ] = 0;
+		}
+		output_load[ i ].status = DRIVER_DISABLED;
+		output_load[ i ].recheck = 0;
+	}
+	report_driver_status();
 	global_power_state = GLOBAL_POWER_OFF;
 	return( prev != GLOBAL_POWER_OFF);
 }
@@ -3255,7 +3689,7 @@ static void management_service_routine( void ) {
 				}
 				else if( load_confirmed ) {
 					//
-					//	Only send confirmation if confirmation was recieved
+					//	Only send confirmation if confirmation was received
 					//
 					if( !queue_output( manage->contains )) {
 						report_error( COMMAND_REPORT_FAIL, manage->target );
@@ -3303,9 +3737,9 @@ static void link_buffer_chain( void ) {
 
 #ifdef LCD_DISPLAY_ENABLE
 		//
-		//	Not really necesary but ensures all buffers
+		//	Not really necessary but ensures all buffers
 		//	contain something displayable even if it has
-		//	not been explicity set.
+		//	not been explicitly set.
 		//
 		memset( circular_buffer[ i ].display, '_', LCD_DISPLAY_BUFFER_WIDTH );
 		circular_buffer[ i ].display[ 0 ] = '[';
@@ -3314,7 +3748,11 @@ static void link_buffer_chain( void ) {
 
 	}
 	//
-	//	Link up all the buffers into a loop in numerical order.
+	//	Link up *all* the buffers into a loop in numerical order.
+	//
+	//	If the programming track is not enabled, then this is the
+	//	only time the circular buffer is formed, and must include
+	//	all the buffers.
 	//
 	for( i = 0; i < TRANSMISSION_BUFFERS-1; i++ ) circular_buffer[ i ].next = circular_buffer + ( i + 1 );
 	//
@@ -3339,18 +3777,25 @@ static void link_buffer_chain( void ) {
 //
 //	These routines are only called when one or other track is being power up.
 //
+//	These routines are *only* required when the firmware is required to support
+//	a programming track in addition to the main operations track.
+//
 static void link_main_buffers( void ) {
 	//
 	//	This routine is called to shape the circular buffers
 	//	to only contain the operating track buffers.
 	//
+#ifdef PROGRAMMING_TRACK
 	cli();
 	circular_buffer[ PROGRAMMING_BASE_BUFFER-1 ].next = circular_buffer;
 	circular_buffer[ TRANSMISSION_BUFFERS-1 ].next = circular_buffer;
 	sei();
+#endif
 }
 
 #ifndef DCC_PLUS_PLUS_COMPATIBILITY
+
+#ifdef PROGRAMMING_TRACK
 
 static void link_prog_buffers( void ) {
 	//
@@ -3363,6 +3808,7 @@ static void link_prog_buffers( void ) {
 	sei();
 }
 
+#endif
 #endif
 
 //
@@ -3377,7 +3823,12 @@ static void initialise_data_structures( void ) {
 	int	i;
 
 	//
-	//	We start all buffer circularly linked.
+	//	We start all buffer circularly linked, however, this
+	//	is not the "correct" linkage (depending on which track
+	//	is being operated).  When operating the main track only
+	//	the main track packets are linked.  When operating the
+	//	(optional) programming track, only the programming track
+	//	packet (there is only 1) is linked to itself.
 	//
 	link_buffer_chain();
 	//
@@ -3397,8 +3848,13 @@ static void initialise_data_structures( void ) {
 	//
 	current = circular_buffer;
 
+	//
+	//	Make sure the "pin out" data is empty as we are initially not
+	//	driving current to any track.
+	//
 #ifdef SHIELD_PORT_DIRECT
-	output_mask = 0;
+	output_mask_on = 0;
+	output_mask_off = 0;
 #else
 	output_pins = 0;
 #endif
@@ -3421,17 +3877,32 @@ void setup( void ) {
 	//
 	Serial.begin( SERIAL_BAUD_RATE );
 	while( !Serial );
-	Serial.println( "Arduino DCC Generator Firmware (" SELECT_ALT( "Native", "DCC++" ) " personality)" );
 	//
 	//	Initialise all of the H Bridge Drivers from the
 	//	motor shield configuration table.
 	//
+#ifdef SHIELD_PORT_DIRECT
+	//
+	//	If accessing the direction port directly, we can
+	//	set it up in one go.
+	//
+	SHIELD_PORT_DIRECT_DIR = 0xff;
+	SHIELD_PORT_DIRECT = 0;
+#endif
+
 	for( byte i = 0; i < SHIELD_OUTPUT_DRIVERS; i++ ) {
 		byte	p;
 
+#ifndef SHIELD_PORT_DIRECT
+		//
+		//	If *not* accessing the direction port directly,
+		//	then we individually configure the direction
+		//	pins.
+		//
 		p = pgm_read_byte( &( shield_output[ i ].direction ));
 		pinMode( p, OUTPUT );
 		digitalWrite( p, LOW );
+#endif
 		p = pgm_read_byte( &( shield_output[ i ].enable ));
 		pinMode( p, OUTPUT );
 		digitalWrite( p, LOW );
@@ -3465,39 +3936,39 @@ void setup( void ) {
 	//
 	//		Set Timer2 to default empty values.	
 	//
-	TCCR2A = 0;	//	Set entire TCCR2A register to 0
-	TCCR2B = 0;	//	Same for TCCR2B
-	TCNT2  = 0;	//	Initialize counter value to 0
+	HW_TCCRnA = 0;	//	Set entire HW_TCCRnA register to 0
+	HW_TCCRnB = 0;	//	Same for HW_TCCRnB
+	HW_TCNTn  = 0;	//	Initialize counter value to 0
 	//
 	//		Set compare match register to
 	//		generate the correct tick duration.
 	//
-	OCR2A = TIMER_INTERRUPRT_CYCLES;
+	HW_OCRnA = TIMER_INTERRUPT_CYCLES;
 	//
 	//		Turn on CTC mode
 	//
-	TCCR2A |= ( 1 << WGM21 );
+	HW_TCCRnA |= ( 1 << HW_WGMn1 );
 
 #if TIMER_CLOCK_PRESCALER == 1
 
 	//
-	//		Set CS20 bit for no pre-scaler (factor == 1 )
+	//		Set HW_CSn0 bit for no pre-scaler (factor == 1 )
 	//
-	TCCR2B |= ( 1 << CS20 );
+	HW_TCCRnB |= ( 1 << HW_CSn0 );
 	
 #else
 #if TIMER_CLOCK_PRESCALER == 8
 
 	//
-	//		Set CS21 bit for pre-scaler factoror 8
+	//		Set HW_CSn1 bit for pre-scaler factor 8
 	//
-	TCCR2B |= ( 1 << CS21 );
+	HW_TCCRnB |= ( 1 << HW_CSn1 );
 #else
 
 	//
-	//	Prescaler value not supported.
+	//	Pre-scaler value not supported.
 	//
-#error "Select interrupt clock prescaler not supported"
+#error "Selected interrupt clock pre-scaler not supported"
 
 #endif
 #endif
@@ -3505,14 +3976,14 @@ void setup( void ) {
 	//
 	//		Enable timer compare interrupt
 	//
-	TIMSK2 |= ( 1 << OCIE2A );
+	HW_TIMSKn |= ( 1 << HW_OCIEnA );
   	//
 	//	Enable interrupts.
 	//
 	sei();
 
 	//
-	//	Kick of the power monitor and management system.
+	//	Kick off the power monitor and management system.
 	//
 	init_driver_load();
 
@@ -3529,12 +4000,71 @@ void setup( void ) {
 	//
 
 #ifdef LCD_DISPLAY_ENABLE
-
-	Wire.begin();
+	//
+	//	First enable the TWI interface:
+	//
+	//	0	No Slave address
+	//	false	Do not accept general calls (broadcasts)
+	//	true	Enable the I2C/TWI interrupt handler
+	//	true	Use internal pull up resistors
+	//
+	twi_init( 0, false, true, true );
+	//
+	//	Kick off the LCD display, now that the TWI
+	//	interface is enabled, and add the frame
+	//	buffer.
+	//
 	lcd.begin();
-	lcd.backlight( true );
-	lcd.clear();
-	lcd.enable_poll( poll_serial_input );
+	lcd.setBuffer( lcd_buffer, LCD_BUFFER );
+#endif
+
+#ifdef SPLASH_ENABLE
+	{
+		static const char banner_line[] PROGMEM = {
+			SPLASH_LINE_1 "\n" SPLASH_LINE_2 "\n" SPLASH_LINE_3 "\n" SPLASH_LINE_4 "\n"
+		};
+		byte	l;
+		char	*s, c;
+
+		//
+		//	Display banner to the LCD for a short period.
+		//
+		l = 0;
+		s = (char *)banner_line;
+		
+#ifdef LCD_DISPLAY_ENABLE
+		lcd.clear();
+#endif
+
+		Serial.println();
+		while(( c = pgm_read_byte( s++ )) != EOS ) {
+			if( c == '\n' ) {
+				
+#ifdef LCD_DISPLAY_ENABLE
+				lcd.setPosn( 0, ++l );
+#endif
+
+				Serial.println();
+			}
+			else {
+				
+#ifdef LCD_DISPLAY_ENABLE
+				lcd.writeChar( c );
+#endif
+
+				Serial.print( c );
+			}
+		}
+		Serial.println();
+		
+#ifdef LCD_DISPLAY_ENABLE
+		lcd.synchronise( SPLASH_WAIT );
+		lcd.clear();
+#else
+		delay( SPLASH_WAIT );
+#endif
+	}
+
 #endif
 }
 
@@ -3551,13 +4081,13 @@ void setup( void ) {
 #include "mul_div.h"
 
 //
-//	Routine that "draws" a styalised bar-graph of an 8 bit value
+//	Routine that draws a stylised bar-graph of a 16 bit value
 //	in a supplied number of characters.
 //
-static void bar_graph( byte val, char *buf, byte len ) {
+static void bar_graph( word val, word scale, char *buf, byte len ) {
 	byte	div, a, b, c;
 
-	div = 255 / len;
+	div = scale / len;
 	a = div >> 2;
 	b = div >> 1;
 	c = a + b;
@@ -3589,36 +4119,39 @@ static void bar_graph( byte val, char *buf, byte len ) {
 }
 
 //
-//	Time of previous call to display update (ms).
+//	Time of next call to display update (ms).
 //
-static unsigned long last_lcd_update = 0;
+static unsigned long next_lcd_update = 0;
 
 //
-//	Update routine.
+//	The next line of screen to be updated.
 //
-//	This routine re-draws *every* character on the display *every* time.
+static byte next_lcd_line = 0;
+
 //
-//	This is inefficient and un-necesary, but for the moment is the simplest
-//	way to ensure that the display is correctly drawn.
+//	LCD Update routine.
 //
-//	An initialisation routine needs to be created that pre-draws the static
-//	elements of the display which would be called from setup().
+//	This is called frequently, and is the responcibility of this
+//	routine to return immediately 99% of the time.
+//
+//	The update of the LCD has been spread over a number of calls
+//	to reduce the "dead time" that the MCU spends in this routine
+//	at any single time.
+//
+//	The variable "next_lcd_line" is stepped from 0 to LCD_DISPLAY_ROWS
+//	(inclusive), on equal divisions of LCD_UPDATE_INTERVAL microseconds.
+//
+//	During steps 0 to LCD_DISPLAY_ROWS-1 the corresponding lines of
+//	the STATUS and DISTRICT areas are updated.  On the final count of
+//	"LCD_DISPLAY_ROWS" the BUFFER area is fully updated.
 //
 static void display_lcd_updates( unsigned long now ) {
-	unsigned int	uptime,
-			delta;
 
 	//
-	//	Store the uptime as seconds.
+	//	Is it time to update the LCD again?
 	//
-	uptime = now / 1000;
-
-	//
-	//	Establish the time since we last ran the
-	//	LCD update funciton
-	//
-	delta = (unsigned int)( now - last_lcd_update );
-	last_lcd_update = now;
+	if( now < next_lcd_update ) return;
+	next_lcd_update += LCD_UPDATE_INTERVAL / ( LCD_DISPLAY_ROWS + 1 );
 
 	//
 	//	Output the STATUS column data in the following order:
@@ -3632,120 +4165,139 @@ static void display_lcd_updates( unsigned long now ) {
 	//
 	//	Now complete each of the rows in LCD_DISPLAY_STATUS_WIDTH-1 characters.
 	//
-	{
-		char		buffer[ LCD_DISPLAY_STATUS_WIDTH ];
+	switch( next_lcd_line ) {
+		case 0:	{
+			char		buffer[ LCD_DISPLAY_STATUS_WIDTH ];
 
-		//
-		//	Row 0, always available, Power Load Average
-		//
-		buffer[ 0 ] = 'L';
-		if( backfill_int_to_text( buffer+1, last_highest_power, LCD_DISPLAY_STATUS_WIDTH-2 )) {
-			memset( buffer+1, HASH, LCD_DISPLAY_STATUS_WIDTH-2 );
+			//
+			//	Row 0, always available, Power Load Average
+			//
+			buffer[ 0 ] = 'L';
+			if( backfill_int_to_text( buffer+1, last_highest_power, LCD_DISPLAY_STATUS_WIDTH-2 )) {
+				memset( buffer+1, HASH, LCD_DISPLAY_STATUS_WIDTH-2 );
+			}
+			buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_COMPAT( '|', ':' );
+			lcd.setPosn( LCD_DISPLAY_STATUS_COLUMN, 0 );
+			lcd.writeBuf( buffer, LCD_DISPLAY_STATUS_WIDTH );
+			break;
 		}
-		buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_ALT( '|', ':' );
-		lcd.position( LCD_DISPLAY_STATUS_COLUMN, 0 );
-		lcd.write( buffer, LCD_DISPLAY_STATUS_WIDTH );
-	}
 
 #if LCD_DISPLAY_ROWS > 1
-	{
-		char		buffer[ LCD_DISPLAY_STATUS_WIDTH ];
-		byte	c;
+		case 1: {
+			char		buffer[ LCD_DISPLAY_STATUS_WIDTH ];
+			byte	c;
 
-		//
-		//	Row 1, (F)ree bit buffers and (P)ower status
-		//
-		c = 0;
-		for( byte i = 0; i < TRANSMISSION_BUFFERS; i++ ) {
-			if( circular_buffer[ i ].state == TBS_EMPTY ) {
-				c++;
+			//
+			//	Row 1, (F)ree bit buffers and (P)ower status
+			//
+			c = 0;
+			for( byte i = 0; i < TRANSMISSION_BUFFERS; i++ ) {
+				if( circular_buffer[ i ].state == TBS_EMPTY ) {
+					c++;
+				}
 			}
+			buffer[ 0 ] = 'P';
+			switch( global_power_state ) {
+				case GLOBAL_POWER_OFF: {
+					buffer[ 1 ] = '0';
+					break;
+				}
+				case GLOBAL_POWER_MAIN: {
+					buffer[ 1 ] = '1';
+					break;
+				}
+				case GLOBAL_POWER_PROG: {
+					buffer[ 1 ] = '2';
+					break;
+				}
+				default: {
+					buffer[ 1 ] = HASH;
+					break;
+				}
+			}
+			buffer[ 2 ] = 'F';
+			if( backfill_int_to_text( buffer+3, c, LCD_DISPLAY_STATUS_WIDTH-4 )) {
+				memset( buffer+3, HASH, LCD_DISPLAY_STATUS_WIDTH-4 );
+			}
+			buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_COMPAT( '|', ':' );
+			lcd.setPosn( LCD_DISPLAY_STATUS_COLUMN, 1 );
+			lcd.writeBuf( buffer, LCD_DISPLAY_STATUS_WIDTH );
+			break;
 		}
-		buffer[ 0 ] = 'P';
-		switch( global_power_state ) {
-			case GLOBAL_POWER_OFF: {
-				buffer[ 1 ] = '0';
-				break;
-			}
-			case GLOBAL_POWER_MAIN: {
-				buffer[ 1 ] = '1';
-				break;
-			}
-			case GLOBAL_POWER_PROG: {
-				buffer[ 1 ] = '2';
-				break;
-			}
-			default: {
-				buffer[ 1 ] = HASH;
-				break;
-			}
-		}
-		buffer[ 2 ] = 'F';
-		if( backfill_int_to_text( buffer+3, c, LCD_DISPLAY_STATUS_WIDTH-4 )) {
-			memset( buffer+3, HASH, LCD_DISPLAY_STATUS_WIDTH-4 );
-		}
-		buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_ALT( '|', ':' );
-		lcd.position( LCD_DISPLAY_STATUS_COLUMN, 1 );
-		lcd.write( buffer, LCD_DISPLAY_STATUS_WIDTH );
-	}
 #endif
 
 #if LCD_DISPLAY_ROWS > 2
-	{
-		char		buffer[ LCD_DISPLAY_STATUS_WIDTH ];
+		case 2: {
+			char		buffer[ LCD_DISPLAY_STATUS_WIDTH ];
 
-		//
-		//	Row 2, DCC packets (T)ransmitted sent per second
-		//
-		buffer[ 0 ] = 'T';
-		if( backfill_int_to_text( buffer+1, (int)mul_div( statistic_packets, 1000, delta ), LCD_DISPLAY_STATUS_WIDTH-2 )) {
-			memset( buffer+1, HASH, LCD_DISPLAY_STATUS_WIDTH-2 );
+			//
+			//	Row 2, DCC packets (T)ransmitted sent per second
+			//
+			buffer[ 0 ] = 'T';
+			if( backfill_int_to_text( buffer+1, (int)mul_div( lcd_statistic_packets, 1000, LCD_UPDATE_INTERVAL ), LCD_DISPLAY_STATUS_WIDTH-2 )) {
+				memset( buffer+1, HASH, LCD_DISPLAY_STATUS_WIDTH-2 );
+			}
+			buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_COMPAT( '|', ':' );
+			lcd.setPosn( LCD_DISPLAY_STATUS_COLUMN, 2 );
+			lcd.writeBuf( buffer, LCD_DISPLAY_STATUS_WIDTH );
+			lcd_statistic_packets = 0;
+			break;
 		}
-		buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_ALT( '|', ':' );
-		lcd.position( LCD_DISPLAY_STATUS_COLUMN, 2 );
-		lcd.write( buffer, LCD_DISPLAY_STATUS_WIDTH );
-	}
 #endif
 
 #if LCD_DISPLAY_ROWS > 3
-	{
-		char			buffer[ LCD_DISPLAY_STATUS_WIDTH ];
-		byte			odd;
+		case 3: {
+			unsigned int		uptime;
+			char			buffer[ LCD_DISPLAY_STATUS_WIDTH ];
+			byte			odd;
 
-		//
-		//	Row 3, The (U)ptime in seconds
-		//
-		buffer[ 0 ] = 'U';
-		odd = uptime & 1;
-		if( uptime < 1000 ) {
 			//
-			//	Display time in seconds.
+			//	Row 3, The (U)ptime in seconds
 			//
-			(void)backfill_int_to_text( buffer+1, uptime, LCD_DISPLAY_STATUS_WIDTH-3 );
-			buffer[ LCD_DISPLAY_STATUS_WIDTH-2 ] = odd? 's': SPACE;
-		}
-		else {
-			if(( uptime /= 60 ) < 1000 ) {
+			//
+			//	Store the uptime as seconds.
+			//
+			uptime = now / 1000;
+
+			buffer[ 0 ] = 'U';
+			odd = uptime & 1;
+			if( uptime < 1000 ) {
 				//
-				//	Display time in minutes.
+				//	Display time in seconds.
 				//
 				(void)backfill_int_to_text( buffer+1, uptime, LCD_DISPLAY_STATUS_WIDTH-3 );
-				buffer[ LCD_DISPLAY_STATUS_WIDTH-2 ] = odd? 'm': SPACE;
+				buffer[ LCD_DISPLAY_STATUS_WIDTH-2 ] = odd? 's': SPACE;
 			}
 			else {
-				//
-				//	Display time in HOURS!
-				//
-				uptime /= 60;
-				(void)backfill_int_to_text( buffer+1, uptime, LCD_DISPLAY_STATUS_WIDTH-3 );
-				buffer[ LCD_DISPLAY_STATUS_WIDTH-2 ] = odd? 'h': SPACE;
+				if(( uptime /= 60 ) < 1000 ) {
+					//
+					//	Display time in minutes.
+					//
+					(void)backfill_int_to_text( buffer+1, uptime, LCD_DISPLAY_STATUS_WIDTH-3 );
+					buffer[ LCD_DISPLAY_STATUS_WIDTH-2 ] = odd? 'm': SPACE;
+				}
+				else {
+					//
+					//	Display time in HOURS!
+					//
+					uptime /= 60;
+					(void)backfill_int_to_text( buffer+1, uptime, LCD_DISPLAY_STATUS_WIDTH-3 );
+					buffer[ LCD_DISPLAY_STATUS_WIDTH-2 ] = odd? 'h': SPACE;
+				}
 			}
+			buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_COMPAT( '|', ':' );
+			lcd.setPosn( LCD_DISPLAY_STATUS_COLUMN, 3 );
+			lcd.writeBuf( buffer, LCD_DISPLAY_STATUS_WIDTH );
+			break;
 		}
-		buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_ALT( '|', ':' );
-		lcd.position( LCD_DISPLAY_STATUS_COLUMN, 3 );
-		lcd.write( buffer, LCD_DISPLAY_STATUS_WIDTH );
-	}
 #endif
+		default: {
+			//
+			//	On this count we are updating the buffer section of the screen.
+			//
+			break;
+		}
+	}
 
 	//
 	//	+--------------------+	The DISTRICT area of the display, showing:
@@ -3755,9 +4307,9 @@ static void display_lcd_updates( unsigned long now ) {
 	//	|      DDDDDDD       |
 	//	+--------------------+	Right hand column set to '|'
 	//
-	{
+	if( next_lcd_line < LCD_DISPLAY_ROWS ) {
 		char		buffer[ LCD_DISPLAY_DISTRICT_WIDTH ];
-		byte		d, r, c;
+		byte		d, c;
 
 		//
 		//	Get the compiler to calculate the parameters
@@ -3776,52 +4328,87 @@ static void display_lcd_updates( unsigned long now ) {
 		//	Display the columns which do not contain valid data (the edge and
 		//	any unused spaces).
 		//
-		memset( buffer, SPACE, LCD_DISPLAY_DISTRICT_WIDTH-1 );
-		buffer[ LCD_DISPLAY_DISTRICT_WIDTH-1 ] = '|';
-		for( r = 0; r < LCD_DISPLAY_ROWS; r++ ) {
-			lcd.position( LCD_DISPLAY_BUFFER_COLUMN - LCD_DISPLAY_DISTRICT_LEFT, r );
-			lcd.write( buffer+( LCD_DISPLAY_DISTRICT_WIDTH - LCD_DISPLAY_DISTRICT_LEFT ), LCD_DISPLAY_DISTRICT_LEFT );
-		}
+#if ( LCD_DISPLAY_DISTRICT_LEFT-1 ) > 1
+		memset( buffer, SPACE, LCD_DISPLAY_DISTRICT_LEFT-1 );
+#elif ( LCD_DISPLAY_DISTRICT_LEFT-1 ) == 1
+		buffer[ 0 ] = SPACE;
+#endif
+		buffer[ LCD_DISPLAY_DISTRICT_LEFT-1 ] = '|';
+		//
+		//	display..
+		//
+		lcd.setPosn( LCD_DISPLAY_BUFFER_COLUMN - LCD_DISPLAY_DISTRICT_LEFT, next_lcd_line );
+		lcd.writeBuf( buffer, LCD_DISPLAY_DISTRICT_LEFT );
 			
 		//
-		//	We step through the drivers and walk r,c up and down, left to right.
+		//	We cheat a little here; we know drivers and LCD rows are all numbered
+		//	from 0, so we can use the LCD data to move the driver number through
+		//	the driver array picking out only those that occupy the LCD line we
+		//	are interested in.
 		//
-		r = 0;
 		c = 0;
-		for( d = 0; d < SHIELD_OUTPUT_DRIVERS; d++ ) {
-			lcd.position( LCD_DISPLAY_DISTRICT_COLUMN + c, r );
+		for( d = next_lcd_line; d < SHIELD_OUTPUT_DRIVERS; d += LCD_DISPLAY_ROWS ) {
+			//
+			//	pick where we are drawing...
+			//
+			lcd.setPosn( LCD_DISPLAY_DISTRICT_COLUMN + c, next_lcd_line );
+			//
+			//	Fill in the buffer and draw it.
+			//
 			buffer[ 0 ] = 'A' + d;
-			if( output_load[ d ].restart ) {
-				//
-				//	This driver/district is in a restart
-				//	caused by a power exception.
-				//
-				memset( buffer+1, '*', LCD_DISPLAY_DISTRICT_COLW-1 );
-				lcd.blink( true );
-				lcd.write( buffer, LCD_DISPLAY_DISTRICT_COLW );
-				lcd.blink( false );
+			switch( output_load[ d ].status ) {
+				case DRIVER_OFF: {
+					//
+					//	This driver/district is in a restart
+					//	caused by a power exception.
+					//
+					memset( buffer+1, '*', LCD_DISPLAY_DISTRICT_COLW-1 );
+					break;
+				}
+				case DRIVER_FLIPPED: {
+					//
+					//	This driver/district has been "flipped" to
+					//	the opposite phase.
+					//
+					memset( buffer+1, '~', LCD_DISPLAY_DISTRICT_COLW-1 );
+					break;
+				}
+				case DRIVER_DISABLED: {
+					//
+					//	This driver/district is disabled.
+					//
+					memset( buffer+1, '_', LCD_DISPLAY_DISTRICT_COLW-1 );
+					break;
+				}
+				default: {
+					//
+					//	Draw the bar as a reflection of power consumption
+					//
+					bar_graph( output_load[ d ].compound_value[ COMPOUNDED_VALUES-1 ], AVERAGE_CURRENT_LIMIT, buffer+1, LCD_DISPLAY_DISTRICT_COLW-1 );
+					break;
+				}
 			}
-			else {
-				bar_graph( output_load[ d ].compound_value[ COMPOUNDED_VALUES-1 ], buffer+1, LCD_DISPLAY_DISTRICT_COLW-1 );
-				lcd.write( buffer, LCD_DISPLAY_DISTRICT_COLW );
-			}
-			if(( r += 1 ) >= LCD_DISPLAY_ROWS ) {
-				r = 0;
-				c += LCD_DISPLAY_DISTRICT_COLW;
-			}
+			//
+			//	display and move on
+			//
+			lcd.writeBuf( buffer, LCD_DISPLAY_DISTRICT_COLW );
+			c += LCD_DISPLAY_DISTRICT_COLW;
 		}
 		//
 		//	Empty any remaining spaces
 		//
 		if( c < ( LCD_DISPLAY_DISTRICT_WIDTH - LCD_DISPLAY_DISTRICT_LEFT )) {
-			memset( buffer, SPACE, LCD_DISPLAY_DISTRICT_WIDTH-1 );
+			//
+			//	prep spaces
+			//
+			memset( buffer, SPACE, LCD_DISPLAY_DISTRICT_COLW );
+			//
+			//	draw them as required.
+			//
 			while( c < ( LCD_DISPLAY_DISTRICT_WIDTH - LCD_DISPLAY_DISTRICT_LEFT )) {
-				lcd.position( LCD_DISPLAY_DISTRICT_COLUMN + c, r );
-				lcd.write( buffer, LCD_DISPLAY_DISTRICT_COLW );
-				if(( r += 1 ) >= LCD_DISPLAY_ROWS ) {
-					r = 0;
-					c += LCD_DISPLAY_DISTRICT_COLW;
-				}
+				lcd.setPosn( LCD_DISPLAY_DISTRICT_COLUMN + c, next_lcd_line );
+				lcd.writeBuf( buffer, LCD_DISPLAY_DISTRICT_COLW );
+				c += LCD_DISPLAY_DISTRICT_COLW;
 			}
 		}
 	}
@@ -3834,26 +4421,33 @@ static void display_lcd_updates( unsigned long now ) {
 	//	|             BBBBBBB|	LCD_DISPLAY_BUFFER_WIDTH bytes wide.
 	//	+--------------------+	
 	//
-	{
+	if( next_lcd_line == LCD_DISPLAY_ROWS ){
 		byte	r;
 
 		r = 0;
 		for( byte i = 0; i < TRANSMISSION_BUFFERS; i++ ) {
-			if(( circular_buffer[ i ].state == TBS_RUN )||( circular_buffer[ i ].state == TBS_RELOAD )) {
-				lcd.position( LCD_DISPLAY_BUFFER_COLUMN, r );
-				lcd.write( circular_buffer[ i ].display, LCD_DISPLAY_BUFFER_WIDTH );
-				if(( r += 1 ) >= LCD_DISPLAY_ROWS ) break;
-			}
+				if(( circular_buffer[ i ].state == TBS_RUN )||( circular_buffer[ i ].state == TBS_RELOAD )) {
+					lcd.setPosn( LCD_DISPLAY_BUFFER_COLUMN, r );
+					lcd.writeBuf( circular_buffer[ i ].display, LCD_DISPLAY_BUFFER_WIDTH );
+					if(( r += 1 ) >= LCD_DISPLAY_ROWS ) break;
+				}
 		}
 		//
 		//	Clear out remaining spaces.
 		//
 		while( r < LCD_DISPLAY_ROWS ) {
-			lcd.position( LCD_DISPLAY_BUFFER_COLUMN, r );
+			lcd.setPosn( LCD_DISPLAY_BUFFER_COLUMN, r );
 			lcd.fill( SPACE, LCD_DISPLAY_BUFFER_WIDTH );
 			r++;
 		}
 	}
+
+	//
+	//	Move to the next line, *but* also step through
+	//	count LCD_DISPLAY_ROWS as we use this to update
+	//	whole buffer area.
+	//
+	if( ++next_lcd_line > LCD_DISPLAY_ROWS ) next_lcd_line = 0;
 }
 
 #endif
@@ -4183,6 +4777,12 @@ static byte compose_function_change( byte *command, int adrs, int func, int stat
 }
 
 //
+//	The following commands are only require on the Programming
+//	Track.
+//
+#ifdef PROGRAMMING_TRACK
+
+//
 //	Compose a digital reset packet
 //
 static byte compose_digital_reset( byte *command ) {
@@ -4243,6 +4843,14 @@ static byte compose_verify_cv_bit( byte *command, int cv, int bnum, int value ) 
 	return( 3 );
 }
 
+//
+//	End programming track
+//
+#endif
+
+//
+//	End non-compatible
+//
 #endif
 
 //
@@ -4402,6 +5010,11 @@ static void lcd_summary_function( char *buffer, int target, int func, int state 
 }
 
 //
+//	Include summary command for Programming Track commands.
+//
+#ifdef PROGRAMMING_TRACK
+
+//
 //	Display setting a CV to a value.
 //
 static void lcd_summary_setcv( char *buffer, int cv, int value ) {
@@ -4489,9 +5102,18 @@ static void lcd_summary_readcv( char *buffer, int cv, int bitno, int value ) {
 #endif
 }
 
+//
+//	End Programming Track summary
+//
 #endif
 
+//
+//	End DCC Compatibility
+//
+#endif
 
+//
+//	End LCD Display Enabled
 #endif
 	
 //
@@ -4725,6 +5347,20 @@ static void lcd_summary_readcv( char *buffer, int cv, int bitno, int value ) {
 	//
 	//		LOAD: Figure between 0 and 1023
 	//
+	//	Report status of individual districts
+	//
+	//		[D a b ...]
+	//
+	//		Reported numbers (a, b, c ...) reflect
+	//		the individual districts A, B C etc (independent
+	//		of the role of the district).  The values
+	//		provided follow the following table:
+	//
+	//			0	Disabled
+	//			1	Enabled
+	//			2	Phase Flipped
+	//			3	Overloaded
+	//
 	//	Error detected by the firmware
 	//
 	//		-> [E ERR ARG]
@@ -4858,6 +5494,7 @@ static void scan_line( char *buf ) {
 						//
 						//	Power Prog Track on
 						//
+#ifdef PROGRAMMING_TRACK
 						if( global_power_state != GLOBAL_POWER_OFF ) {
 							report_error( POWER_NOT_OFF, cmd );
 							break;
@@ -4865,6 +5502,9 @@ static void scan_line( char *buf ) {
 						if( power_on_prog_track()) link_prog_buffers();
 						reply_1( reply, 'P', 2 );
 						if( !queue_output( reply )) report_error( COMMAND_REPORT_FAIL, cmd );
+#else
+						report_error( NO_PROGRAMMING_TRACK, cmd );
+#endif
 						break;
 					}
 					default: {
@@ -5449,6 +6089,7 @@ static void scan_line( char *buf ) {
 				//
 #else
 			case 'S': {
+#ifdef PROGRAMMING_TRACK
 				PENDING_PACKET	**tail;
 				TRANS_BUFFER	*buf;
 				int		cv,
@@ -5527,6 +6168,9 @@ static void scan_line( char *buf ) {
 				load_confirmed = false;
 				buf->reply = REPLY_ON_CONFIRM;
 				buf->state = ( buf->state == TBS_EMPTY )? TBS_LOAD: TBS_RELOAD;
+#else
+				report_error( NO_PROGRAMMING_TRACK, cmd );
+#endif
 				break;
 			}
 #endif
@@ -5540,6 +6184,7 @@ static void scan_line( char *buf ) {
 				//
 #else
 			case 'V': {
+#ifdef PROGRAMMING_TRACK
 				PENDING_PACKET	**tail;
 				TRANS_BUFFER	*buf;
 				int		cv,
@@ -5618,6 +6263,9 @@ static void scan_line( char *buf ) {
 				load_confirmed = false;
 				buf->reply = REPLY_ON_CONFIRM;
 				buf->state = ( buf->state == TBS_EMPTY )? TBS_LOAD: TBS_RELOAD;
+#else
+				report_error( NO_PROGRAMMING_TRACK, cmd );
+#endif
 				break;
 			}
 #endif
@@ -5631,6 +6279,7 @@ static void scan_line( char *buf ) {
 				//
 #else
 			case 'R': {
+#ifdef PROGRAMMING_TRACK
 				PENDING_PACKET	**tail;
 				TRANS_BUFFER	*buf;
 				int		cv,
@@ -5721,6 +6370,9 @@ static void scan_line( char *buf ) {
 				load_confirmed = false;
 				buf->reply = REPLY_ON_CONFIRM;
 				buf->state = ( buf->state == TBS_EMPTY )? TBS_LOAD: TBS_RELOAD;
+#else
+				report_error( NO_PROGRAMMING_TRACK, cmd );
+#endif
 				break;
 			}
 #endif
@@ -5752,7 +6404,7 @@ static void process_input( byte count ) {
 	while( count-- ) {
 		char	c;
 
-		switch(( c = read_serial_input())) {
+		switch(( c = Serial.read())) {
 			case PROT_IN_CHAR: {
 				//
 				//	Found the start of a command, regardless of what we thought
@@ -5820,127 +6472,16 @@ static void process_input( byte count ) {
 }
 
 //
-//	Serial Input/Output Polling
-//	---------------------------
-//
-
-//
-//	This routine gathers input from the serial port without
-//	processing and keeps it pending time to process it.
-//
-
-#ifdef DEBUG_SERIAL_POLL
-//
-//	Define a pair of variables to hold the last micros() reading
-//	and the largest reading so far.
-//
-static unsigned long	micros_last = 0,
-			micros_longest = 0;
-
-#endif
-
-//
-//	The Serial Buffer
-//
-static char	serial_buf[ SERIAL_BUFFER_SIZE ];
-static byte	serial_in = 0,				// Where to add
-		serial_out = 0,				// Where to remove
-		serial_avail = SERIAL_BUFFER_SIZE;	// How many empty
-
-//
-//	Polling routine called all over the place.
-//
-static void poll_serial_input( void ) {
-	byte	ready;
-
-#ifdef DEBUG_SERIAL_POLL
-	{
-		unsigned long now = micros();
-		
-		if( now > micros_last ) {
-			if( micros_longest ) {
-				unsigned long diff = now - micros_last;
-				
-				if( diff > micros_longest ) {
-					micros_longest = diff;
-					Serial.print( 'I' );
-					Serial.println( micros_longest );
-				}
-				//
-				//	we will shrink the longest delay, slowly,
-				//	so that we achieve a periodic refresh of
-				//	the longest delay.
-				//
-				if( micros_longest > 100 ) micros_longest -= micros_longest >> 5;
-			}
-			else {
-				//
-				//	Crude way of skipping the first
-				//	reading as this would count all the
-				//	time during set up etc etc...
-				//
-				micros_longest = 1;
-			}
-		}
-		micros_last = now;
-	}
-#endif
-
-	if(( ready = Serial.available())) {
-		while( serial_avail && ready ) {
-			serial_buf[ serial_in++ ] = Serial.read();
-			if( serial_in >= SERIAL_BUFFER_SIZE ) serial_in = 0;
-			serial_avail--;
-			ready--;
-		}
-	}
-}
-
-//
-//	Return how much data is available
-//
-static byte ready_serial_input( void ) {
-	return( SERIAL_BUFFER_SIZE - serial_avail );
-}
-
-//
-//	Get next character from the serial buffer
-//
-static char read_serial_input( void ) {
-	char	v;
-
-	ASSERT( serial_avail < SERIAL_BUFFER_SIZE );
-
-	v = serial_buf[ serial_out++ ];
-	if( serial_out >= SERIAL_BUFFER_SIZE ) serial_out = 0;
-	serial_avail++;
-	return( v );
-}
-
-//
-//	Deal with getting data back to the host computer
-//
-static void poll_serial_output( void ) {
-	byte	i;
-
-	//
-	//	Then try to return any pending output from
-	//	the firmware.
-	//
-	if(( i = Serial.availableForWrite())) process_output( i );
-}
-
-//
 //	Firmware main processing loop.
 //	------------------------------
 //
 
 //
-//	Define a "watchdog" variable that is used to initiate
+//	Define a the periodic variable that is used to initiate
 //	activities at durations greater than microseconds or
 //	milliseconds.
 //
-static unsigned long watchdog = 0;
+static unsigned long periodic = 0;
 
 //
 //	Finally, the main event loop:
@@ -5956,10 +6497,21 @@ void loop( void ) {
 	now = millis();
 
 	//
+	//	Initially service those background facilities which
+	//	need regular attention.
+	//
+	twi_eventProcessing();
+	lcd.service();
+
+	//
 	//	Is there Serial data to be processed...
 	//
-	if(( ready = ready_serial_input())) process_input( ready );
-	poll_serial_input();
+	if(( ready = Serial.available())) process_input( ready );
+	//
+	//	Then try to return any pending output from
+	//	the firmware.
+	//
+	if(( ready = Serial.availableForWrite())) process_output( ready );
 	
 	//
 	//	Every time we spin through the loop we give the
@@ -5968,8 +6520,6 @@ void loop( void ) {
 	//	synchronised correctly.
 	//
 	management_service_routine();
-	poll_serial_output();
-	poll_serial_input();
 
 	//
 	//	Power related actions triggered only when data is ready
@@ -5979,8 +6529,6 @@ void loop( void ) {
 		//	Analyse current data.
 		//	
 		monitor_current_load( now, track_load_reading );
-		poll_serial_output();
-		poll_serial_input();
 		
 #ifdef DEBUG_STATISTICS
 		//
@@ -5991,36 +6539,20 @@ void loop( void ) {
 
 	}
 	//
-	//	Time for watch dog activities?
+	//	Time for periodic activities?
 	//
-	if( now > watchdog ) {
+	if( now > periodic ) {
 		//
 		//	Yes, but before getting on with them, set the
-		//	next watchdog time.
+		//	next periodic time.
 		//
-		watchdog = now + WATCHDOG_INTERVAL;
-
-		//
-		//	Are there driver/districts which need restarting?
-		//
-		restart_suspended_drivers( now );
-		poll_serial_input();
+		periodic = now + PERIODIC_INTERVAL;
 
 #ifndef DCC_PLUS_PLUS_COMPATIBILITY
 		//
 		//	Forward out an asynchronous power update.
 		//
 		report_track_power();
-		poll_serial_output();
-		poll_serial_input();
-#endif
-
-#ifdef LCD_DISPLAY_ENABLE
-		//
-		//	Send updates to the LCD.  Input polling is managed
-		//	by the LCD library.
-		//
-		display_lcd_updates( now );
 #endif
 
 #ifdef DEBUG_STATISTICS
@@ -6031,38 +6563,41 @@ void loop( void ) {
 		//	Output a "per second" statistics analysis
 		//	of how often code sections are executing.
 		//
-		//	This code is *really* slow and should not (for
-		//	the moment) be considered for anything other
+		//	This code is *really* slow and should not at
+		//	any time be considered for anything other
 		//	than manual ad-hoc information gathering.
 		//
 		queue_output( "STAT:L=" );
-		queue_long( SCALE( statistic_looping, 1000, WATCHDOG_INTERVAL ));
+		queue_long( SCALE( statistic_looping, 1000, PERIODIC_INTERVAL ));
 		queue_output( ":T=" );
-		queue_int( SCALE( statistic_packets, 1000, WATCHDOG_INTERVAL ));
+		queue_int( SCALE( statistic_packets, 1000, PERIODIC_INTERVAL ));
 		queue_output( ":P=" );
-		queue_int( SCALE( statistic_power, 1000, WATCHDOG_INTERVAL ));
+		queue_int( SCALE( statistic_power, 1000, PERIODIC_INTERVAL ));
 		queue_output( "\n" );
 		//
 		//	Reset those values to zero
 		//
 		statistic_looping = 0;
 		statistic_power = 0;
-
-#endif
-#if defined( DEBUG_STATISTICS )| defined( LCD_DISPLAY_ENABLE )
-
 		statistic_packets = 0;
 
 #endif
 
 	}
+
+#ifdef LCD_DISPLAY_ENABLE
+	//
+	//	Send updates to the LCD.
+	//
+	display_lcd_updates( now );
+#endif
+
+
 	//
 	//	Then we give the Error management system an
 	//	opportunity to queue some output data.
 	//
 	flush_error_queue();
-	poll_serial_output();
-	poll_serial_input();
 
 #ifdef DEBUG_STATISTICS
 	//
