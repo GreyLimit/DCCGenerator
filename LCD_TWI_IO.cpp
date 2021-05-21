@@ -445,8 +445,8 @@ void LCD_TWI_IO::service( void ) {
 			}
 			break;
 		};
-		case mc_reset: {		// Resetting the device
-			_fsm_buffer = 0;
+		case mc_reset: {		// Resetting the device by sending
+			_fsm_buffer = 0;	// an empty byte.
 			_fsm_instruction++;
 			break;
 		}
@@ -621,6 +621,7 @@ void LCD_TWI_IO::service( void ) {
 			//	This should not happen, but if it does then
 			//	there is a real problem.  All I can do is
 			//	log an error (if possible) and reset the program.
+			//	Error logging not implement yet.
 			//
 			_fsm_instruction = mc_idle_program;
 			break;
@@ -718,20 +719,26 @@ bool LCD_TWI_IO::backlight( bool on ) {
 }
 
 bool LCD_TWI_IO::clear( void ) {
-	if( _frame_size ) {
-		for( byte i = 0; i < _frame_size; _frame_buffer[ i++ ] = ( SPACE | 0x80 ));
-		_frame_last = 0;
-		_frame_next = 0;
+	if( queueTransfer( mc_inst_long_delay, LCD_TWI_IO_CLEAR_SCREEN )) {
+		if( _frame_size ) {
+			for( byte i = 0; i < _frame_size; _frame_buffer[ i++ ] = ( SPACE | 0x80 ));
+			_frame_last = 0;
+			_frame_next = 0;
+		}
+		return( true );
 	}
-	return( queueTransfer( mc_inst_long_delay, LCD_TWI_IO_CLEAR_SCREEN ));
+	return( false );
 }
 
 bool LCD_TWI_IO::home( void ) {
-	if( _frame_size ) {
-		_frame_last = 0;
-		_frame_next = 0;
+	if( queueTransfer( mc_inst_long_delay, LCD_TWI_IO_HOME_SCREEN )) {
+		if( _frame_size ) {
+			_frame_last = 0;
+			_frame_next = 0;
+		}
+		return( true );
 	}
-	return( queueTransfer( mc_inst_long_delay, LCD_TWI_IO_HOME_SCREEN ));
+	return( false );
 }
 
 bool LCD_TWI_IO::leftToRight( bool l2r ) {
@@ -741,7 +748,7 @@ bool LCD_TWI_IO::leftToRight( bool l2r ) {
 	//	of line 0 it rolls into line 2.  Like wise rolling off
 	//	line 1 rolls into line 3.
 	//
-	//	This is cause entirely by the memory mapping between
+	//	This is caused entirely by the memory mapping between
 	//	the driver chip and the actual display.
 	//
 	bitWrite( _entryState, LCD_TWI_IO_LEFT_RIGHT, l2r );
@@ -877,7 +884,7 @@ bool LCD_TWI_IO::setBuffer( byte *buffer, byte size ) {
 	//	Set up frame buffer and empty it.
 	//
 	_frame_buffer = buffer;
-	_frame_last = _rows * _cols;
+	_frame_last = required;
 	_frame_next = 0;
 	_frame_cursor = 0;
 	for( byte i = 0; i < _frame_size; _frame_buffer[ i++ ] = ( (byte)SPACE | 0x80 ));
