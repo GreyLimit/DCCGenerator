@@ -313,8 +313,7 @@ TWI_TRANSACTION {
 	//	mid flight.
 	//
 	const TWI_HW_ACTION
-			*action,
-			*reset;
+			*action;
 	//
 	//	Who are we trying to exchange data with?
 	//
@@ -881,7 +880,7 @@ static bool twi_queueTransaction( const TWI_HW_ACTION *action, byte address, byt
 	//	"ptr" is the address of our queue record, so we can now
 	//	fill in this record with the supplied details.
 	//
-	ptr->reset = ptr->action = action;
+	ptr->action = action;
 	ptr->target = address;
 	ptr->buffer = buffer;
 	ptr->next = 0;		// Also set up by the START and RESTART actions
@@ -1118,7 +1117,7 @@ static void twi_loadNextAction( void ) {
 //
 
 //
-//	The following TWI "primative" operations are based on the
+//	The following TWI "primitive" operations are based on the
 //	content of the document:
 //
 //		ATmega48A/PA/88A/PA/168A/PA/328/P
@@ -1135,7 +1134,7 @@ static void twi_loadNextAction( void ) {
 //
 //	Send start condition (also doubles up as a restart)
 //
-static void twi_start( void ) {
+static inline void twi_start( void ) {
 	//
 	//	TWI Control Register, TWCR
 	//
@@ -1159,7 +1158,7 @@ static void twi_start( void ) {
 //	Checks the value of the Initiate flag (TWINT) which will
 //	return to 1 when the previous activity has been completed.
 //
-static bool twi_actionComplete( void ) {
+static inline bool twi_actionComplete( void ) {
 	//
 	//	TWCR	TWI Control Register
 	//
@@ -1179,7 +1178,7 @@ static bool twi_actionComplete( void ) {
 //
 //	Transmit a byte of data
 //
-static void twi_sendByte( byte data ) {
+static inline void twi_sendByte( byte data ) {
 	//
 	//	TWI data IO register, TWDR
 	//
@@ -1220,7 +1219,7 @@ static void twi_sendTarget( byte adrs, bool writing ) {
 //	or NOT Acknowledgement as a result of a byte being
 //	delivered to us.
 //
-static void twi_readAck( bool ack ) {
+static inline void twi_readAck( bool ack ) {
 	//
 	//	TWI Control Register, TWCR
 	//
@@ -1243,7 +1242,7 @@ static void twi_readAck( bool ack ) {
 //
 //	Return the byte which hsa just been delivered to the system
 //
-static byte twi_readByte( void ) {
+static inline byte twi_readByte( void ) {
 	//
 	//	TWI Data Register, TWDR
 	//
@@ -1257,7 +1256,7 @@ static byte twi_readByte( void ) {
 //	Tell the remote slave device that we are done, and
 //	release the bus for other devices to use.
 //
-static void twi_stop( void ) {
+static inline void twi_stop( void ) {
 	//
 	//	TWI Control Register, TWCR
 	//
@@ -1280,7 +1279,7 @@ static void twi_stop( void ) {
 //
 //	Return the slave address as found in TWDR
 //
-static byte twi_slaveAddress( void ) {
+static inline byte twi_slaveAddress( void ) {
 	return( TWDR >> 1 );
 }
 
@@ -1291,7 +1290,7 @@ static byte twi_slaveAddress( void ) {
 //	Return the TWI Bus to a "quiessed" state ready for the next
 //	transmission.
 //
-static void twi_clearBus( void ) {
+static inline void twi_clearBus( void ) {
 	//
 	//	TWI Control Register, TWCR
 	//
@@ -1351,11 +1350,7 @@ static void twi_resetHardware( void ) {
 //	byte twi_state( void )
 //	---------------------------
 //
-//	This can be replaced by a macro speed is determined to
-//	be more critical (but probably will not make that much
-//	difference).
-//
-static byte twi_state( void ) {
+static inline byte twi_state( void ) {
 	return( TWSR & 0xf8 );
 }
 
@@ -1926,7 +1921,6 @@ static void twi_stateChangeHandler( byte twsr ) {
 		}
 	}
 	else {
-		
 		if( TW_SLAVE_STATUS( twsr )) {
 			//
 			//	SLAVE Actions
@@ -1996,7 +1990,7 @@ static void twi_stateChangeHandler( byte twsr ) {
 //	these are not "caught up" in the time and space restrictions that
 //	being part of an ISR call would create.
 //
-//	This will also, if TWI polling is enabled, driver forward any
+//	This will also, if TWI polling is enabled, drive forward any
 //	in progress transaction (slave or master).
 //
 void twi_eventProcessing( void ) {

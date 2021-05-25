@@ -257,6 +257,7 @@ extern bool twi_cmd_exchange( byte address, byte *buffer, byte send, byte recv, 
 //		buffer		The address of a byte array where received and returned data will be stored
 //		size		The number of bytes in the buffer area
 //		answer(		The function to call when a master starts an exchange with us
+//			adrs	The address this device is responding to
 //			buffer	The buffer space where the data sent is placed
 //			size	The over all, maximum size of the buffer
 //			len)	The number of bytes in the buffer making up the master request
