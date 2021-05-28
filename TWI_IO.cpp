@@ -672,8 +672,8 @@ byte twi_lowestFrequency( void ) {
 }
 
 //
-//	void twi_init( byte adrs, bool gcall, bool isr, bool pullup = true )
-//	--------------------------------------------------------------------
+//	void twi_init( byte adrs, bool gcall, bool isr, bool pullup )
+//	-------------------------------------------------------------
 //
 //	Call this routine in the setup() function.
 //
