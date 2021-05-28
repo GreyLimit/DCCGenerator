@@ -181,7 +181,7 @@ INVALID_BIT_VALUE|15|Invalid bit value supplied (0 or 1, obviously)
 INVALID_BYTE_VALUE|16|Invalid byte value (valid values: 0 to 255)
 INVALID_WORD_VALUE|17|Invalid word value (valid values: 0 to 32767)
 COMMAND_REPORT_FAIL|18|Firmware unable to send command report back to host computer
-TRANSMISSION_BUSY|19|Firmware unable to locate empty transmisionn buffer for requested DCC command
+TRANSMISSION_BUSY|19|Firmware unable to locate empty transmision buffer for requested DCC command
 COMMAND_QUEUE_FAILED|20|Firmware unable to queue pending DCC reply (all pending buffers in use).  Pending buffers are used to capture a return confirmation/status from the supplied DCC command
 POWER_NOT_OFF|21|Power transitions only allowed between OFF and another state
 POWER_OVERLOAD|22|Consistent high level power drain detected
@@ -239,8 +239,8 @@ Serial port configured to 38400 baud.
 
     [V CV VALUE] -> [V CV VALUE STATE]
 
-- CV:	Number of CV to set (1-1024)
-- VALUE:	8 bit value to apply (0-255)
+- CV:	Number of CV to test (1-1024)
+- VALUE:	8 bit value to verify (0-255)
 - STATE:	1=Confirmed, 0=Failed
 
 ### Verify CV bit value (Programming track)
@@ -251,7 +251,7 @@ value, if they are the same, return 1, otherwise
 
     [R CV BIT VALUE] -> [R CV BIT STATE]
 
-- CV:	Number of CV to set (1-1024)
+- CV:	Number of CV to test (1-1024)
 - BIT:	Bit number (0 LSB - 7 MSB)
 - VALUE:	0 or 1
 - STATE:	1=Confirmed, 0=Failed
