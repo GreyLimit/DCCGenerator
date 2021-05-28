@@ -6,13 +6,16 @@ For the moment, simply reading the source code should provide an insight into wh
 
 Update (May 2021)
 
-The Code Generator now support either the original Arduino Uno and Motor Shield, or can be installed into
-some bespoke hardware to provide a larger number of DCC districts (up to six).
+The DCC Generator now supports either the original Arduino Uno and Motor Shield platform, or can be installed
+onto some bespoke hardware to provide a larger number of DCC districts (up to six).
 
-In addition to this the TWI and LCD code previously used has been removed and replaced with more flexible
+In addition to this the I2C/TWI and LCD code previously used has been removed and replaced with more flexible
 packages which have a small memory foot print and do not block execution of the firmware (unless told to do so).
 
 This has enabled some "fixes" to be removed and restored a cleaner operating structure to the firmware (imho).
+
+Initial testing of this new firmware (on both hardware platforms) gives a *subjective* feeling that, yes, the
+firmware *is* operating more smoothly resulting in better responsiveness from the trains.
 
 ## DCC Plus Plus Command Summary
 
@@ -222,7 +225,7 @@ Serial port configured to 38400 baud.
 
     [P STATE] -> [P STATE]
 
-- STATE: 1=On, 0=Off
+- STATE: 0=Off, 1=Main Track, 2=Prog Track
 
 ### Set CV value (Programming track)
 
