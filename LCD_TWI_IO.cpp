@@ -786,34 +786,21 @@ bool LCD_TWI_IO::blink( bool on ) {
 bool LCD_TWI_IO::position( byte col, byte row ) {
 	byte newAddress;
 
-	if( row < _rows ) {
-		switch( row ) {
-			case 0: {
-				newAddress = 0;
-				break;
-			}
-			case 1: {
-				newAddress = 0x40;
-				break;
-			}
-			case 2: {
-				newAddress = 0 + _cols;
-				break;
-			}
-			case 3: {
-				newAddress = 0x40 + _cols;
-				break;
-			}
-			default: {
-				newAddress = 0; // default to top line.
-				break;
-			}
-		}
-		newAddress += col;
-	}
-	else {
-		newAddress = 0;
-	}
+	//
+	//	Start with the required column position
+	//
+	newAddress = col;
+	//
+	//	For ODD rows we add the fixed offset
+	//
+	if( row & 1 ) newAddress += 0x40;
+	//
+	//	For the repeated rows add the total number of columns
+	//
+	if( row & 2 ) newAddress += _cols;
+	//
+	//	Transmit command
+	//
 	return( queueTransfer( mc_inst_short_delay, LCD_TWI_IO_SET_POSITION | newAddress ));
 }
 
