@@ -515,7 +515,25 @@ TWI_BITRATE {
 //	for the MCU to support reliably.
 //
 static const TWI_BITRATE twi_bitrates[] PROGMEM = {
-#if	F_CPU == 16000000
+#if	F_CPU == 20000000
+	{	40,	17,	0	},
+	{	35,	20,	0	},
+	{	30,	25,	0	},
+	{	25,	32,	0	},
+	{	20,	42,	0	},
+	{	15,	58,	0	},
+	{	10,	92,	0	},
+	{	9,	103,	0	},
+	{	8,	117,	0	},
+	{	7,	33,	1	},
+	{	6,	39,	1	},
+	{	5,	48,	1	},
+	{	4,	60,	1	},
+	{	3,	81,	1	},
+	{	2,	123,	1	},
+	{	1,	62,	2	},
+	
+#elif	F_CPU == 16000000
 	{	40,	12,	0	},
 	{	35,	14,	0	},
 	{	30,	18,	0	},
@@ -872,7 +890,7 @@ static bool twi_queueTransaction( const TWI_HW_ACTION *action, byte address, byt
 	}
 	//
 	//	Locate the next available slot and adjust queue
-	//	appropiately.
+	//	appropriately.
 	//
 	ptr = &( twi_queue[ twi_queue_in++ ]);
 	if( twi_queue_in >= TWI_MAX_QUEUE_LEN ) twi_queue_in = 0;
@@ -920,7 +938,7 @@ bool twi_cmd_quick_write( byte adrs, void *link, void FUNC( reply )( bool valid,
 //	-----------------------------
 //	(6.5.2) Send Byte
 //	(6.5.4) Write Byte/Word
-//	(6.5.7) Block Write/Read
+//	(6.5.7) Block Write
 //	(6.5.10) Write 32 protocol
 //	(6.5.12) Write 64 protocol
 //
@@ -1038,7 +1056,7 @@ void twi_clearQueue( void ) {
 //
 void twi_synchronise( void ) {
 	//
-	//	Exit only when the queu is empty
+	//	Exit only when the queue is empty
 	//
 	while( twi_queueLength()) twi_eventProcessing();
 }
@@ -1390,8 +1408,8 @@ masterLoop:
 		case TWI_HW_START_COMPLETE: {
 			//
 			//	We are waiting for the start (or restart) to complete successfully.
-			//	If it has move to the next step in the machine.  If not then redirect
-			//	machine to the abort transaction code.
+			//	If it has completed then move to the next step in the machine.
+                        //      If not then redirect machine to the abort transaction code.
 			//
 			switch( twsr ) {
 				case TW_START:
@@ -1519,7 +1537,7 @@ masterLoop:
 				}
 				case TW_MT_DATA_NACK: {
 					//
-					//	The data byte was NAckd, the writ has failed.
+					//	The data byte was NAckd, the write has failed.
 					//
 					twi_error = twsr;
 					active->action = twi_abortTransaction;
@@ -1593,7 +1611,7 @@ masterLoop:
 			//
 			//	Anything we do not recognise we take to
 			//	be handled by another routine, and so our
-			//	roll here is to do nothing
+			//	roll here is to do nothing.
 			//
 			break;
 		}
@@ -1689,6 +1707,7 @@ static void twi_slaveMachine( byte twsr ) {
 			//	TWI hardware to pick up this communication
 			//
 			twi_slave_adrsd = twi_slaveAddress();
+			twi_readAck( true );
 			break;
 		}
 		case TW_SR_DATA_ACK:
@@ -1764,7 +1783,7 @@ static void twi_slaveMachine( byte twsr ) {
 			//	transaction.  This has failed with a slave connection being
 			//	accepted instead.
 			//
-			//	For an action perspective, the slave code does not change from
+			//	From an action perspective, the slave code does not change from
 			//	"normal" connection.  However, the failed master connection
 			//	will need to be restarted once the slave transmission is completed
 			//
@@ -1851,6 +1870,8 @@ static void twi_slaveMachine( byte twsr ) {
 			//
 			//	Last data byte successfully sent, stop using the bus.
 			//
+			twi_slave_send = 0;
+			twi_slave_len = 0;
 			twi_clearBus();
 			twi_slave_active = false;
 			break;
@@ -1868,7 +1889,7 @@ static void twi_slaveMachine( byte twsr ) {
 //	The purpose of this routine is to steer the bus back to a
 //	reset status thus allowing new transactions to process.
 //	
-static void twi_masterBusReset( byte twsr ) {
+static void twi_masterBusReset( UNUSED( byte twsr )) {
 	//
 	//	Review document "Application Note AN-686" from
 	//	Analog Devices (www.analog.com) titled:
@@ -1881,6 +1902,7 @@ static void twi_masterBusReset( byte twsr ) {
 	//	it can do about this.
 	//
 	//	To be implemented.
+        //      ==================
 	//
 }
 
@@ -1994,14 +2016,13 @@ static void twi_stateChangeHandler( byte twsr ) {
 //	in progress transaction (slave or master).
 //
 void twi_eventProcessing( void ) {
-
 	//
 	//	Master Processing
 	//	-----------------
 	//
 	//	The value of "twi_active" indicates (if non-zero) that there
 	//	transaction in progress with the details of the transaction
-	//	is a at the address indicated.
+	//	is at the address indicated.
 	//
 	if( twi_active ) {
 		//
@@ -2159,8 +2180,7 @@ void twi_eventProcessing( void ) {
 //	===================================
 //
 //	This routine simply calls the generic event/state handler
-//	passing in the current time of the ISR and the state
-//	value being notified.
+//	passing in the state value being notified.
 //
 //
 ISR( TWI_vect ) {

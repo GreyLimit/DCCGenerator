@@ -37,6 +37,16 @@
 #include <inttypes.h>
 #include <util/twi.h>
 
+//
+//	Syntactic sugar
+//
+#ifndef FUNC
+#define FUNC(f)	(*(f))
+#endif
+#ifndef UNUSED
+#define UNUSED(v)		__attribute__((unused)) v
+#endif
+
 #ifndef TWI_FREQ
 //
 //	This code divides all TWI clock frequencies by 10K
@@ -64,13 +74,6 @@
 #endif
 
 //
-//	Syntactic sugar
-//
-#ifndef FUNC
-#define FUNC(f)	(*(f))
-#endif
-
-//
 //	Define a period of Microseconds which the firmware will
 //	wait during a hardware reset of the TWI
 //
@@ -78,6 +81,12 @@
 //	operation state.
 //
 #define TWI_HARDWARE_RESET_DELAY_US 50
+
+//
+//	Define the Lowest and Highest valid addresses.
+//
+#define TWI_ADDRESS_LOWEST	16
+#define TWI_ADDRESS_HIGHEST	127
 
 //
 //	The Setup Routines.
@@ -273,8 +282,8 @@ extern void twi_slaveFunction( byte *buffer, byte size, byte FUNC( answer )( byt
 //
 
 //
-//	void twi_eventProcessing( unsigned long now )
-//	---------------------------------------------
+//	void twi_eventProcessing( void )
+//	--------------------------------
 //
 //	IMPORTANT
 //	=========
