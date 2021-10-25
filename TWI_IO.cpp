@@ -1818,13 +1818,8 @@ static void twi_slaveMachine( byte twsr ) {
 			//	routine with an empty buffer and send what ever it puts
 			//	into the buffer.
 			//
-			if( twi_slave_send == 0 ) {
-				if( twi_slave_answer ) {
-					twi_slave_send = FUNC( twi_slave_answer )( twi_slave_adrsd, twi_slave_buffer, twi_slave_size, 0 );
-				}
-				else {
-					twi_slave_answer = 0;
-				}
+			if(( twi_slave_send == 0 )&& twi_slave_answer ) {
+				twi_slave_send = FUNC( twi_slave_answer )( twi_slave_adrsd, twi_slave_buffer, twi_slave_size, 0 );
 			}
 			//
 			//	Set the sending index to 0 so we send from the start of the buffer.
