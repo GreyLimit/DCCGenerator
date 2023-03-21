@@ -17,8 +17,7 @@
 //	along with this program.  If not, see < https://www.gnu.org/licenses/>.
 //
 
-#include <avr/pgmspace.h>
-
+#include "Environment.h"
 #include "TWI_IO.h"
 #include "LCD_TWI_IO.h"
 
@@ -414,7 +413,7 @@ void LCD_TWI_IO::done( bool ok ) {
 //	called "outside" the objects framework.  Hence the need for
 //	casting the link point back to the right type.
 //
-static void twi_callback( bool valid, void *link, byte *buffer, byte len ) {
+static void twi_callback( bool valid, void *link, UNUSED( byte *buffer ), UNUSED( byte len )) {
 	((LCD_TWI_IO *)link)->done( valid );
 }
 
@@ -425,7 +424,7 @@ void LCD_TWI_IO::service( void ) {
 	//	of the current LCD program.  This is, effectively,
 	//	where all the actual work gets done.
 	//
-	switch( pgm_read_byte( _fsm_instruction )) {
+	switch( progmem_read_byte_at( _fsm_instruction )) {
 		case mc_idle: {			// machine at idle
 			//
 			//	If we are here then if there is something in the queue
@@ -817,18 +816,15 @@ bool LCD_TWI_IO::index( byte posn ) {
 	//
 	//	Line 1
 	//
-	posn -= _cols;
-	if( posn < _cols ) return( queueTransfer( mc_inst_short_delay, LCD_TWI_IO_SET_POSITION |( 0x40 + posn )));
+	if(( posn -= _cols ) < _cols ) return( queueTransfer( mc_inst_short_delay, LCD_TWI_IO_SET_POSITION |( 0x40 + posn )));
 	//
 	//	Line 2
 	//
-	posn -= _cols;
-	if( posn < _cols ) return( queueTransfer( mc_inst_short_delay, LCD_TWI_IO_SET_POSITION |( _cols + posn )));
+	if(( posn -= _cols ) < _cols ) return( queueTransfer( mc_inst_short_delay, LCD_TWI_IO_SET_POSITION |( _cols + posn )));
 	//
 	//	Line 3
 	//
-	posn -= _cols;
-	if( posn < _cols ) return( queueTransfer( mc_inst_short_delay, LCD_TWI_IO_SET_POSITION |( 0x40 + _cols + posn )));
+	if(( posn -= _cols ) < _cols ) return( queueTransfer( mc_inst_short_delay, LCD_TWI_IO_SET_POSITION |( 0x40 + _cols + posn )));
 	//
 	//	Out of bounds, put it top left, position 0.
 	//
