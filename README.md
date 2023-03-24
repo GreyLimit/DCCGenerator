@@ -1,4 +1,4 @@
-# Arduino Generator V1.3.2
+# Arduino Generator V1.3.3
 
 ## Summary
 
@@ -8,9 +8,9 @@ This version (V1.3) is (probably) the last version before a migration to a more 
 
 This replacement system has been characterised as the "The Mid Controller" being half way between the "Fat" and "Thin" controller solutions.
 
-## This Version
+## Versions 1.3.x
 
-This version has seen the replacement of the Arduino Serial library with my own USART class and a further development of the code associated with the detection of confirmation signals when programming decoders on the programming track.
+These versions have seen the replacement of the Arduino Serial library with my own USART class and a further development of the code associated with the detection of confirmation signals when programming decoders on the programming track.
 
 Commands operating upon the programming track have been "better" constructed as a result of a note read indicating that decoders should only act on a command if they receive TWO sequential and intact copies of it.  To this end when such a command is initiated the transmission buffer has 2 copies of the command placed into it for this purpose.
 
@@ -108,6 +108,17 @@ The USB connection to the host computer is 8-bit serial, no parity at 38400 baud
 	//		VALUE:	0 or 1
 	//		STATE:	1=Confirmed, 0=Failed
 	//
+	//	Accessing EEPROM configurable constants
+	//	---------------------------------------
+	//
+	//		[Q] -> [Q N]				Return number of tunable constants
+	//		[Q C] ->[Q C V NAME]		Access a specific constant C (range 0..N-1)
+	//		[Q C V V] -> [Q C V NAME]	Set a specific constant C to value V,
+	//									second V is to prevent accidental
+	//									update.
+	//		[Q -1 -1] -> [Q -1 -1]		Reset all constants to default.
+	//
+	//
 	//	Asynchronous data returned from the firmware
 	//	============================================
 	//
@@ -123,7 +134,7 @@ The USB connection to the host computer is 8-bit serial, no parity at 38400 baud
 	//
 	//	Report status of individual districts
 	//
-	//		[D a b ...]
+	//		-> [D a b ...]
 	//
 	//		Reported numbers (a, b, c ...) reflect
 	//		the individual districts A, B C etc (independent

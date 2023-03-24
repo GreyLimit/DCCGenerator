@@ -145,7 +145,6 @@ class Byte_Queue_API {
 			return( print( s ) && println());
 		}
 
-#if 0	
 		//
 		//	The following command supports printing
 		//	directly out of program memory.
@@ -153,11 +152,8 @@ class Byte_Queue_API {
 		void print_PROGMEM( const char *pm ) {
 			char	c;
 
-			while(( c = progmem_read_byte_at( pm++ )) != EOS ) if( !print( c )) return( false );
-			return( true );
+			while(( c = progmem_read_byte_at( pm++ )) != EOS ) if( !print( c )) return;
 		}
-#endif
-
 };
 
 //

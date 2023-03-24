@@ -23,11 +23,29 @@
 ///
 
 //
-//	Arduino DCC Generator V1.3.2
+//	Arduino DCC Generator V1.3.3
 //	============================
 //
-#define VERSION_NUMBER "1.3.2"
+#define VERSION_NUMBER "1.3.3"
 
+//
+//	Modifications to this version:
+//
+//		Flexible contant handling using the EEPROM to keep
+//		'configured' constants.  This has required a migration
+//		of constants towards the top of the source file so that
+//		the default values are easily tuned.
+//
+//		Constant configuration accessed and modified via an
+//		extension to the communications protocol (see the
+//		'Q' command).
+//
+//	March 2023
+//		
+
+//
+//	Arduino DCC Generator V1.3.2
+//	----------------------------
 //
 //	Included the set CV bit command '[U cv bnum value]' to the system
 //	and also doubled up the command *inside* the command transmission
@@ -129,6 +147,10 @@
 //
 #define PROGRAMMING_TRACK 1
 
+//
+//	Program Tuneable Constants
+//
+#include "Constants.h"
 
 //
 //	Include Modules from the "Library" solution...
@@ -229,20 +251,9 @@ static USART_IO		console;
 //	DEBUG_POWER_MONITOR	Define to get details of the power
 //				monitoring code
 //
-//	DEBUG_STATISTICS	Collect and transmit statistics pertinent
-//				to the frequency that sections of the code
-//				are executed, per second.
-//
-//	DEBUG_BUFFER_TABLE	Send an outline breakdown of the bit
-//				buffers to the Serial port in the event of
-//				one of the bit buffer related errors
-//				being generated.
-//
 //#define DEBUG_BUFFER_MANAGER	1
 //#define DEBUG_BIT_SLICER	1
 //#define DEBUG_POWER_MONITOR	1
-//#define DEBUG_STATISTICS	1
-//#define DEBUG_BUFFER_TABLE	1
 
 //
 //	Quick options sanity check and define selection macro for
@@ -409,11 +420,6 @@ static USART_IO		console;
 #define LCD_ACTION_TOGGLE	'~'
 
 //
-//	Define the interval at which the LCD is updated, in milliseconds.
-//
-#define LCD_UPDATE_INTERVAL	1000
-
-//
 //	Finally, on LCDs..
 //
 //	From a wiring perspective (apart from +5V and Ground) the
@@ -566,59 +572,6 @@ static unsigned long now;
 //	High Level Configuration values.
 //	================================
 //
-//	These definitions alter operational elements
-//	of the solution, but not the functional aspects.
-//
-
-//
-//	Define the absolute current limit value (0-1023) at which
-//	the power is removed from the track (current spike).
-//
-//	The average current limit is the maximum difference in
-//	current and average reading allowed before a overload condition
-//	is declared
-//
-#define INSTANT_CURRENT_LIMIT	850
-#define AVERAGE_CURRENT_LIMIT	750
-
-//
-//	The grace period during which, after applying power to a district,
-//	any overloads are ignored (in milliseconds).
-//
-#define POWER_GRACE_PERIOD	1000			// One second.
-
-//
-//	Define the minimum number of positive delta amps required for the
-//	code to recognised a confirmation signal.
-//
-//	Pre-November 2022: MINIMUM_DELTA_AMPS=35
-//	Post-November 2022: MINIMUM_DELTA_AMPS=18
-//
-//	Note that this value, set while the firmware was in version 1.2
-//	may now be too low as version 1.3 maintains a proper delay period
-//	during which time the power levels are monitored.
-//
-#define MINIMUM_DELTA_AMPS	18
-
-//
-//	Define the periodic interval in milliseconds.
-//
-#define PERIODIC_INTERVAL	1000
-
-//
-//	Define the Driver/District reset period (in milliseconds)
-//	This is the duration through which an individual driver is
-//	disabled as a result of a power exception (spike/overload)
-//	before a restart is attempted.
-//
-#define DRIVER_RESET_PERIOD	10000
-
-//
-//	Define the Driver/District phase test period.  This is the
-//	time after the firmware flips a driver/district phasing
-//	before concluding that the new phase is all OK.
-//
-#define DRIVER_PHASE_PERIOD	100
 
 //
 //	Define the maximum number of bytes in a DCC packet that we
@@ -642,29 +595,6 @@ static unsigned long now;
 //	formulate the host reply to a command being received successfully.
 //
 #define MAXIMUM_DCC_REPLY	16
-
-//
-//	Define the number of times various types of packets are repeated.
-//
-//	TRANSIENT_COMMAND_REPEATS
-//	
-//		Operational, non-mobile, commands are considered "non-
-//		permanent" DCC commands and are repeated before it is
-//		automatically dropped.
-//
-//	SERVICE_MODE_RESET_REPEATS
-//
-//		The number of times a service mode reset command is
-//		repeated before and after a service mode command.
-//
-//	SERVICE_MODE_COMMAND_REPEATS
-//
-//		The number of times a service mode action command is
-//		repeated.
-//
-#define TRANSIENT_COMMAND_REPEATS	8
-#define SERVICE_MODE_RESET_REPEATS	20
-#define SERVICE_MODE_COMMAND_REPEATS	10
 
 //
 //	Define the number of buffers set aside for each of the
@@ -707,20 +637,6 @@ static unsigned long now;
 //	to each section.
 //
 #define TRANSMISSION_BUFFERS	(ACCESSORY_TRANS_BUFFERS+MOBILE_TRANS_BUFFERS+PROGRAMMING_BUFFERS)
-
-//
-//	Define the number of "1"s transmitted by the firmware
-//	forming the "preamble" for the DCC packet itself.
-//
-//	The DCC standard specifies a minimum of 14 for normal
-//	commands and 20 for programming commands.  These are the
-//	short and long preambles.
-//
-//	I have made the long pre-amble even longer to assist with
-//	confirmation detection.
-//
-#define DCC_SHORT_PREAMBLE	15
-#define DCC_LONG_PREAMBLE	60
 
 //
 //	Various DCC protocol based values
@@ -1923,14 +1839,6 @@ static int	lcd_statistic_packets;
 
 #endif
 
-#ifdef DEBUG_STATISTICS
-
-static int	statistic_packets;
-static int	statistic_power;
-static long	statistic_looping;	// This value grows too fast for an int.
-
-#endif
-
 
 //
 //	Generalised data formatting routines.
@@ -2023,7 +1931,7 @@ static bool backfill_int_to_text( char *buf, int v, byte len ) {
 //	a range of value types.  Not compiled in unless one of the
 //	debugging macros has been enabled.
 //
-#if defined( DEBUG_BUFFER_MANAGER )||defined( DEBUG_BIT_SLICER )||defined( DEBUG_POWER_MONITOR )||defined( DEBUG_STATISTICS )||defined( DEBUG_BUFFER_TABLE )
+#if defined( DEBUG_BUFFER_MANAGER )||defined( DEBUG_BIT_SLICER )||defined( DEBUG_POWER_MONITOR )
 
 static char to_hex( byte n ) {
 	if(( n >= 0 )&&( n < 10 )) return( '0' + n );
@@ -2040,65 +1948,6 @@ static int queue_byte( byte v ) {
 	return( console.print( t ));
 }
 
-#ifdef DEBUG_STATISTICS
-
-static int queue_int( int v ) {
-	char	t[ TEXT_BUFFER ];
-
-	*int_to_text( t, v ) = EOS;
-	return( console.print( t ));
-}
-
-static int queue_long( long v ) {
-	char	t[ TEXT_BUFFER ];
-
-	if(( v > -32000 )&&( v < 32000 )) {
-		*int_to_text( t, v ) = EOS;
-	}
-	else {
-		//
-		//	If the value is too big for an int
-		//	then we'll fudge things about a little.
-		//
-		char	*p;
-
-		p = int_to_text( t, v / 1000 );
-		*p++ = '0';
-		*p++ = '0';
-		*p++ = '0';
-		*p = EOS;
-	}
-	return( console.print( t ));
-}
-
-#endif
-
-#ifdef DEBUG_BUFFER_TABLE
-
-//
-//	Define a routine to display high level content of a bit buffer
-//
-static void queue_bit_buffer( TRANS_BUFFER *ptr ) {
-	//
-	//	We will output this directly because it's
-	//	too big to go through the output buffer and
-	//	it should not be enabled in anything other
-	//	than a manual debugging context (i.e. manually
-	//	typing command into the firmware and confirming
-	//	the results returned).
-	//
-	console.print( '[' );
-	console.print( ptr->state );
-	console.print( ',' );
-	console.print( ptr->target );
-	console.print( ',' );
-	console.print( ptr->duration );
-	console.print( ',' );
-	console.print( ptr->contains );
-	console.println( ']' );
-}
-
-#endif
 #endif
 
 
@@ -2398,12 +2247,6 @@ ISR( HW_TIMERn_COMPA_vect ) {
 					//
 					current = current->next;
 
-#ifdef DEBUG_STATISTICS
-					//
-					//	Count a successful packet transmission for debugging
-					//
-					statistic_packets++;
-#endif
 #ifdef LCD_DISPLAY_ENABLE
 					//
 					//	Count a successful packet transmission for LCD display
@@ -4104,6 +3947,11 @@ static void initialise_data_structures( void ) {
 
 void setup( void ) {
 	//
+	//	Initialise all the constant values
+	//
+	initialise_constants();
+	
+	//
 	//	First things first: Set up the serial connection.  This
 	//	takes place regardless of if we are encoding to use the
 	//	serial port for application purposes.
@@ -4377,7 +4225,7 @@ static byte next_lcd_line = 0;
 //	at any single time.
 //
 //	The variable "next_lcd_line" is stepped from 0 to LCD_DISPLAY_ROWS
-//	(inclusive), on equal divisions of LCD_UPDATE_INTERVAL microseconds.
+//	(inclusive), on divisions of LINE_REFRESH_INTERVAL microseconds.
 //
 //	During steps 0 to LCD_DISPLAY_ROWS-1 the corresponding lines of
 //	the STATUS and DISTRICT areas are updated.  On the final count of
@@ -4389,7 +4237,7 @@ static void display_lcd_updates( void ) {
 	//	Is it time to update the LCD again?
 	//
 	if( now < next_lcd_update ) return;
-	next_lcd_update += LCD_UPDATE_INTERVAL / ( LCD_DISPLAY_ROWS + 1 );
+	next_lcd_update += LINE_REFRESH_INTERVAL;
 
 	//
 	//	Output the STATUS column data in the following order:
@@ -4472,7 +4320,7 @@ static void display_lcd_updates( void ) {
 			//	Row 2, DCC packets (T)ransmitted sent per second
 			//
 			buffer[ 0 ] = 'T';
-			if( backfill_int_to_text( buffer+1, (int)mul_div( lcd_statistic_packets, 1000, LCD_UPDATE_INTERVAL ), LCD_DISPLAY_STATUS_WIDTH-2 )) {
+			if( backfill_int_to_text( buffer+1, mul_div<int>( lcd_statistic_packets, 1000, LCD_UPDATE_INTERVAL ), LCD_DISPLAY_STATUS_WIDTH-2 )) {
 				memset( buffer+1, HASH, LCD_DISPLAY_STATUS_WIDTH-2 );
 			}
 			buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_COMPAT( '|', ':' );
@@ -4835,11 +4683,6 @@ static TRANS_BUFFER *find_available_buffer( byte base, byte count, int target ) 
 	//
 	//	No available buffer located.
 	//
-
-#ifdef DEBUG_BUFFER_TABLE
-	for( byte i = 0; i < TRANSMISSION_BUFFERS; i++ ) queue_bit_buffer( circular_buffer + i );
-#endif
-
 	return( NULL );
 }
 
@@ -6865,6 +6708,98 @@ static void scan_line( char *buf ) {
 				break;
 			}
 #endif
+			//
+			//	EEPROM configurable constants
+			//
+			case 'Q': {
+				char	*n;
+				word	*w;
+				byte	*b;
+				
+				//
+				//	Accessing EEPROM configurable constants
+				//
+				//	[Q] -> [Q N]			Return number of tunable constants
+				//	[Q C] ->[Q C V NAME]		Access a specific constant C (range 0..N-1)
+				//	[Q C V V] -> [Q C V NAME]	Set a specific constant C to value V,
+				//					second V is to prevent accidental
+				//					update.
+				//	[Q -1 -1] -> [Q -1 -1]		Reset all constants to default.
+				//
+				switch( args ) {
+					case 0: {
+						console.print( PROT_IN_CHAR );
+						console.print( 'Q' );
+						console.print( CONSTANTS );
+						console.print( PROT_OUT_CHAR );
+						console.println();
+						break;
+					}
+					case 1: {
+						if( find_constant( arg[ 0 ], &n, &b, &w ) != ERROR ) {
+							console.print( PROT_IN_CHAR );
+							console.print( 'Q' );
+							console.print( arg[ 0 ]);
+							console.print( SPACE );
+							if( b ) {
+								console.print( (word)(*b ));
+							}
+							else {
+								console.print( *w );
+							}
+							console.print( SPACE );
+							console.print_PROGMEM( n );
+							console.print( PROT_OUT_CHAR );
+							console.println();
+						}
+						break;
+					}
+					case 2: {
+						if(( arg[ 0 ] == -1 )&&( arg[ 1 ] == -1 )) {
+							reset_constants();
+							console.print( PROT_IN_CHAR );
+							console.print( 'Q' );
+							console.print( -1 );
+							console.print( SPACE );
+							console.print( -1 );
+							console.print( PROT_OUT_CHAR );
+							console.println();
+						}
+						break;
+					}
+					case 3: {
+						if(( arg[ 1 ] == arg[ 2 ])&&( find_constant( arg[ 0 ], &n, &b, &w ) != ERROR )) {
+							if( b ) {
+								*b = (byte)arg[ 1 ];
+							}
+							else {
+								*w = arg[ 1 ];
+							}
+							record_constants();
+							console.print( PROT_IN_CHAR );
+							console.print( 'Q' );
+							console.print( arg[ 0 ]);
+							console.print( SPACE );
+							if( b ) {
+								console.print( (word)( *b ));
+							}
+							else {
+								console.print( *w );
+							}
+							console.print( SPACE );
+							console.print_PROGMEM( n );
+							console.print( PROT_OUT_CHAR );
+							console.println();
+						}
+						break;
+					}
+					default: {
+						errors.log_error( INVALID_ARGUMENT_COUNT, cmd );
+						break;
+					}
+				}
+				break;
+			}
 			default: {
 				//
 				//	Here we capture any unrecognised command letters.
@@ -7012,14 +6947,6 @@ void loop( void ) {
 		//	Analyse current data.
 		//	
 		monitor_current_load( track_load_reading );
-		
-#ifdef DEBUG_STATISTICS
-		//
-		//	Count power iterations.
-		//
-		statistic_power++;
-#endif
-
 	}
 	//
 	//	Time for periodic activities?
@@ -7037,35 +6964,6 @@ void loop( void ) {
 		//
 		report_track_power();
 #endif
-
-#ifdef DEBUG_STATISTICS
-
-#define SCALE(v,m,d)	(((long)(v)*(long)(m))/(long)(d))
-
-		//
-		//	Output a "per second" statistics analysis
-		//	of how often code sections are executing.
-		//
-		//	This code is *really* slow and should not at
-		//	any time be considered for anything other
-		//	than manual ad-hoc information gathering.
-		//
-		console.print( "STAT:L=" );
-		queue_long( SCALE( statistic_looping, 1000, PERIODIC_INTERVAL ));
-		console.print( ":T=" );
-		queue_int( SCALE( statistic_packets, 1000, PERIODIC_INTERVAL ));
-		console.print( ":P=" );
-		queue_int( SCALE( statistic_power, 1000, PERIODIC_INTERVAL ));
-		console.print( "\n" );
-		//
-		//	Reset those values to zero
-		//
-		statistic_looping = 0;
-		statistic_power = 0;
-		statistic_packets = 0;
-
-#endif
-
 	}
 
 #ifdef LCD_DISPLAY_ENABLE
@@ -7082,12 +6980,6 @@ void loop( void ) {
 	//
 	flush_error_queue();
 
-#ifdef DEBUG_STATISTICS
-	//
-	//	Count loop iterations.
-	//
-	statistic_looping++;
-#endif
 }
 
 //
