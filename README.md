@@ -8,6 +8,10 @@ This version (V1.3) is (probably) the last version before a migration to a more 
 
 This replacement system has been characterised as the "The Mid Controller" being half way between the "Fat" and "Thin" controller solutions.
 
+## Version 1.3.4
+
+This version sees the intrduction of the "State Restore" command.  This is a command specifically created to facilitate the ability to completely overwrite the "state" of a mobile decoder.  This single command allows both the speed and direction *and all* of the function states to be reset in a single (hopefully nearly atomic) action.  See the descrition of the command for details and caveates.
+
 ## Versions 1.3.x
 
 These versions have seen the replacement of the Arduino Serial library with my own USART class and a further development of the code associated with the detection of confirmation signals when programming decoders on the programming track.
@@ -55,12 +59,38 @@ The USB connection to the host computer is 8-bit serial, no parity at 38400 baud
 	//		VALUE:	1=Enable, 0=Disable
 	//		STATE:	1=Confirmed, 0=Failed
 	//	
+	//	Write Mobile State (Operations Track)
+	//	-------------------------------------
+	//
+	//	Overwrite the entire "state" of a specific mobile decoder
+	//	with the information provided in the arguments.
+	//
+	//	While this is provided as a single DCC Generator command
+	//	there is no single DCC command which implements this functionality
+	//	so consequently the command has to be implemented as a tightly
+	//	coupled sequence of commands.  This being said, thhe implementation
+	//	of the commannd should ensure that either *all* of these commands
+	//	are transmitted or *none* of them are.  While this does not
+	//	guarantee that the target decoder gets all of the updates
+	//	it does increase the likelihood that an incomplete update is
+	//	successful.
+	//
+	//	[W ADRS SPEED DIR FNA FNB FNC FND] -> [W ADRS SPEED DIR]
+	//
+	//		ADRS:	The short (1-127) or long (128-10239) address of the engine decoder
+	//		SPEED:	Throttle speed from 0-126, or -1 for emergency stop
+	//		DIR:	1=Forward, 0=Reverse
+	//		FNA:	Bit mask (in decimal) for Functions 0 through 7
+	//		FNB:	... Functions 8 through 15
+	//		FNC:	... Functions 16 through 23
+	//		FND:	... Functions 24 through 28 (bit positions for 29 through 31 ignored)
+	//
 	//	Enable/Disable Power to track
 	//	-----------------------------
 	//
 	//	[P STATE] -> [P STATE]
 	//
-	//		STATE: 1=On, 0=Off
+	//		STATE: 0=Off, 1=Operations Track ON, 2= Programming Track ON. 
 	//
 	//	Set CV value (Programming track)
 	//	--------------------------------

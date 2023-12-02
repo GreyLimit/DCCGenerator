@@ -1676,7 +1676,7 @@ static void twi_slaveMachine( byte twsr ) {
 			//
 			//	Roll on to normal code handling.
 			//
-			__attribute__(( fallthrough ));
+			// __attribute__(( fallthrough ));
 		}
 		case TW_SR_SLA_ACK:
 		case TW_SR_GCALL_ACK: {
@@ -1793,7 +1793,7 @@ static void twi_slaveMachine( byte twsr ) {
 			//
 			//	Roll on to normal code handling.
 			//
-			__attribute__(( fallthrough ));
+			// __attribute__(( fallthrough ));
 		}
 		case TW_ST_SLA_ACK: {
 			//

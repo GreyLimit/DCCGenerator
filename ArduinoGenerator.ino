@@ -23,15 +23,29 @@
 ///
 
 //
-//	Arduino DCC Generator V1.3.3
+//	Arduino DCC Generator V1.3.4
 //	============================
 //
-#define VERSION_NUMBER "1.3.3"
+#define VERSION_NUMBER "1.3.4"
+//
+//	Modifications for this version:
+//
+//	December 2023
+//
+//		Added the "Write State" to mobile decoder command.  See
+//		the 'W' command for details.
+//
+//		Removed all pretense of needing to provide DCC++
+//		compatibility.  Who was I kidding?
+//
 
 //
-//	Modifications to this version:
+//	Arduino DCC Generator V1.3.3
+//	----------------------------
 //
-//		Flexible contant handling using the EEPROM to keep
+//	March 2023
+//
+//		Flexible constant handling using the EEPROM to keep
 //		'configured' constants.  This has required a migration
 //		of constants towards the top of the source file so that
 //		the default values are easily tuned.
@@ -40,36 +54,42 @@
 //		extension to the communications protocol (see the
 //		'Q' command).
 //
-//	March 2023
+//	August 2023
 //		
+//		Added adjustable constant value to permit control of
+//		the dynamic load reporting (constant name "dynamic_load
+//		_updates).  Primarily implement to facilitate stopping
+//		stream of output data to simplify debugging.
+//
 
 //
 //	Arduino DCC Generator V1.3.2
 //	----------------------------
+//
+//	March 2023
 //
 //	Included the set CV bit command '[U cv bnum value]' to the system
 //	and also doubled up the command *inside* the command transmission
 //	as there is some evidence to suggest that duplicate sequential
 //	commands are required before the decode is obliged to reply.
 //
-//	March 2023
-//
 
 //
 //	Arduino DCC Generator V1.3.1
 //	----------------------------
 //
+//	March 2023
+//
 //	Incorporated improved confirmation detections code which (largely)
 //	reduces the averaging codes impact in the detection process.
-//
-//	March 2023
 //
 
 //
 //
 //	Arduino DCC Generator V1.3
+//	--------------------------
 //
-
+//	Feb 2023
 //
 //	This version sees a rewrite of the "programming confirmation
 //	mechanism" and an extension of the mechanism that translates
@@ -87,16 +107,14 @@
 //	o	The "long preamble" flag has been replaced in the DCC
 //		command processing (the conversion from byte codes to
 //		bit streams) with "preamble bits" and "postamble bits"
-//		values.  This change an enabled the CV programming
-//		code to introduce a meaningful delay after the specific
+//		values.  This change has enabled the CV programming
+//		code to introduce a meaningful delay after a specific
 //		DCC command in which any reply from the decoder is more
 //		readily and reliably determined.
 //
 //	All-in-all the change in version number to 1.3 is justified as
 //	these changes are significant and affect a number of systems in
 //	the firmware. 
-//
-//	Feb 2023
 //
 //	Arduino DCC Generator V1.2
 //	--------------------------
@@ -113,6 +131,11 @@
 //
 //	Anyway..
 //
+
+
+//
+//	Arduino Generator
+//	=================
 //
 //	A sketch for generating the DCC signal through
 //	an Arduino motor shield.
@@ -123,22 +146,6 @@
 //		Arduino Motor Shield or bespoke Driver board
 //		15 volt (max) DC power supply
 //
-
-//
-//	To implement partial compatibility with the Arduino
-//	DCC Plus Plus firmware, located at:
-//
-//		https://github.com/DccPlusPlus/BaseStation
-//
-//	You should define DCC_PLUS_PLUS_COMPATIBILITY.
-//
-//	This will only enable main track commands, no programming
-//	track commands can be processed.
-//
-//	If not defined then the default set of commands are defined
-//	including a set of programming track commands.
-//
-//#define DCC_PLUS_PLUS_COMPATIBILITY 1
 
 //
 //	To include a programming track as the last DCC output/district
@@ -160,7 +167,8 @@
 #include "USART.h"
 
 //
-//	The CONSOLE device.
+//	The CONSOLE device
+//	==================
 //
 static Byte_Queue<32>	console_in;
 static Byte_Queue<128>	console_out;
@@ -181,34 +189,15 @@ static USART_IO		console;
 //		load by applying power to the motor or other similar
 //		device controlled by the Digital Decoder.
 //
-//
 //	The code that does this (see towards the bottom of the
 //	monitor_current_load() routine) performs an analysis of
-//	the short term current average against the longest term
-//	average.  If the short average is larger (by more than a
-//	fixed amount) than the long average, then there is a
-//	confirmation.
+//	the load reports to determine if a confirmation has been
+//	observed.
 //
-//	Currently the delta required between the two *is* fixed, but
-//	the levels of the short and long averages are floating.
-//
-//	I have the following thoughts (re power monitoring and decoder
-//	to generator confirmation signal):
-//
-//	1/	I am probably not actually "looking" at the power levels
-//		in a meaningful way.  The use of the averaging system has
-//		allowed me to smear the number across a period of time
-//		but not allow me to specify what period of time.
-//
-//	2/	Would, for the programming track, it be better to keep
-//		a running maximum over the specified period?
-//
-//	3/	There is a requirement for a proper delay between issuing
-//		the command and seeing if there has been a reply returned
-//		from the decoder.
-//
-//	This has been facilitated through the incorporating firmware
-//	applied counts for the number of '1's broadcast for the pre-amble
+//	There is a requirement for a proper delay between issuing the
+//	command and seeing if there has been a reply returned from the
+//	decoder.  This has been facilitated through the firmware
+//	incorporating  for the number of '1's broadcast for the pre-amble
 //	*and* the post-amble.  This has provided a mechanism that enables
 //	any reasonable pause to be placed after any command if that
 //	command might generate a reply.
@@ -224,6 +213,20 @@ static USART_IO		console;
 //	CONFIRMATION_PAUSE value and added to the end of all commands
 //	that reasonably anticipate a reply.
 //
+//	A note on amps drawn (with respect to confirmation):
+//
+//	It seems that, in general, any DCC decoder with attached
+//	"stay-alive" power storage solution (usually a capacitor)
+//	is generally not likely to actually generate any consistent
+//	confirmation current draw in response to a programming
+//	command.
+//
+//	The reason is clear: the short term draw needed to achieve
+//	this is mostly, or totally, provided by the Stay-Alive
+//	solution.  While the power drawn over the total period
+//	will be different, there is unlikely to be a "spike" as
+//	per the standards document.
+//
 #define CONFIRMATION_PAUSE 52
 
 //
@@ -231,12 +234,12 @@ static USART_IO		console;
 //	=================
 //
 //	Define any of the following macros to optionally include
-//	at compile time additional code to output status and data
+//	(at compile time) additional code to output status and data
 //	reports to the serial line.
 //
 //	This data will not be in a valid communications format so
 //	it should be possible to run this firmware against the host
-//	software.  Timing of the  firmware might be unavoidably
+//	software.  Timing of the firmware might be unavoidably
 //	impacted.
 //
 //	DEBUG_BUFFER_MANAGER	Define to get status updates from
@@ -248,21 +251,31 @@ static USART_IO		console;
 //				critical code uses to generate the
 //				output signal.
 //
-//	DEBUG_POWER_MONITOR	Define to get details of the power
-//				monitoring code
+//	DEBUG_CONFIRMATION	Define to include additional code that
+//				provides output from the load and
+//				confirmation code on the values being
+//				detected.  Set this to the INDEX number
+//				(internal) of the district you wish to
+//				monitor.
+//
+//				Set to 'SHIELD_OUTPUT_DRIVERS-1' for the
+//				programming track.
+//
+//				Enabling this debug option removes the
+//				ability of the resulting firmware to work
+//				with external software:  This breaks both
+//				the baud rate used and the format of the
+//				data being return through the serial
+//				connection.
 //
 //#define DEBUG_BUFFER_MANAGER	1
 //#define DEBUG_BIT_SLICER	1
-//#define DEBUG_POWER_MONITOR	1
+//#define DEBUG_CONFIRMATION	(SHIELD_OUTPUT_DRIVERS-1)
 
 //
-//	Quick options sanity check and define selection macro for
-//	programming track options.
+//	Define macro to simplify capturing the difference between
+//	the firmware with or without programming track support.
 //
-#if defined( DCC_PLUS_PLUS_COMPATIBILITY ) && defined( PROGRAMMING_TRACK )
-#error "PROGRAMMING_TRACK cannot be defined when compiling for Compatibility mode"
-#endif
-
 #ifdef PROGRAMMING_TRACK
 #define SELECT_PROG(y,n)	y
 #else
@@ -429,7 +442,7 @@ static USART_IO		console;
 //	be different on other platforms.
 //
 //	To keep memory allocation to a minimum (at least on the basic
-//	Arduino UNO) these "Lite" version of the Wire, TWI and LCD_I2C
+//	Arduino UNO) these "Lite" versions of the Wire, TWI and LCD_I2C
 //	libraries are required (found with this code).
 //
 //	*/ Arduino Mega uses different pins: D20/SDA and D21/SCL.  These
@@ -462,9 +475,6 @@ static USART_IO		console;
 //	These are the original "non-blocking" libraries
 //	developed by Jeff Penfold (jeff.penfold@googlemail.com).
 //
-//	It should be noted that these have been superseded but
-//	have not been replaced.
-//
 
 #include "TWI_IO.h"
 #include "LCD_TWI_IO.h"
@@ -493,20 +503,6 @@ static USART_IO		console;
 #define TEXT_BUFFER SELECT_SML(8,12,16)
 
 //
-//	Compatibility Support
-//	=====================
-//
-//	Used where "whole code" substitution would make the code
-//	unnecessarily obscure.  "a" for native mode, "b" for
-//	compatibility mode.
-//
-#ifdef DCC_PLUS_PLUS_COMPATIBILITY
-#define SELECT_COMPAT(a,b)		b
-#else
-#define SELECT_COMPAT(a,b)		a
-#endif
-
-//
 //	Boot Splash Screen
 //	==================
 //
@@ -522,7 +518,7 @@ static USART_IO		console;
 //
 #define SPLASH_ENABLE
 #define SPLASH_LINE_1	"Vers: " VERSION_NUMBER ", " __DATE__
-#define SPLASH_LINE_2	"Mode: " SELECT_COMPAT( "Native " SELECT_PROG( "+", "-" ) "PT", "Compat" ) " " SELECT_SML( "(S)", "(M)", "(L)" )
+#define SPLASH_LINE_2	"Mode: DCCGen " SELECT_PROG( "+", "-" ) "PT/" SELECT_SML( "S", "M", "L" )
 #define SPLASH_LINE_3	"Model: " HW_TITLE
 #define SPLASH_LINE_4	"Baud: " SERIAL_BAUD_RATE_STR
 #define SPLASH_WAIT	3000
@@ -550,8 +546,8 @@ static unsigned long now;
 //	PROT_IN_CHAR	Define the start and end characters of a sentence
 //	PROT_OUT_CHAR	in the target operating system mode syntax.
 //	
-#define PROT_IN_CHAR		SELECT_COMPAT( '[', '<' )
-#define PROT_OUT_CHAR		SELECT_COMPAT( ']', '>' )
+#define PROT_IN_CHAR		'['
+#define PROT_OUT_CHAR		']'
 
 //
 //	Define the Speed and buffer size used when accessing the
@@ -565,8 +561,19 @@ static unsigned long now;
 //	the various supported baud rates.  These are all preceeded
 //	with a 'B'.
 //
-#define SERIAL_BAUD_RATE	SELECT_COMPAT( B38400, B115200 )
-#define SERIAL_BAUD_RATE_STR	SELECT_COMPAT( "38400", "115200" )
+//	Confusingly, if DEBUG_CONFIRMATION is defined we
+//	will default to a debugging speed set below.  This must
+//	be fast enough to enable the serial to transport the high
+//	speed data generated off the micro-controller before the
+//	buffer spaces overflow.
+//
+#if defined( DEBUG_CONFIRMATION )
+#define SERIAL_BAUD_RATE	B115200
+#define SERIAL_BAUD_RATE_STR	"115200"
+#else
+#define SERIAL_BAUD_RATE	B38400
+#define SERIAL_BAUD_RATE_STR	"38400"
+#endif
 
 //
 //	High Level Configuration values.
@@ -588,7 +595,7 @@ static unsigned long now;
 //	Define the maximum number of bytes that can be accepted as
 //	a complete input command.
 //
-#define MAXIMUM_DCC_CMD		16
+#define MAXIMUM_DCC_CMD		32
 
 //
 //	Define a maximum number of characters that are required to
@@ -780,6 +787,7 @@ SHIELD_DRIVER {
 //	should be compatible with the Arduino version (and others).
 //
 #define SHIELD_OUTPUT_DRIVERS	2
+
 //
 //	A and B drivers available, with 4 pins allocated to each.
 //
@@ -1306,20 +1314,6 @@ static PENDING_PACKET *release_pending_recs( PENDING_PACKET *head, bool one ) {
 //	equivalent value.
 //
 
-#ifdef DCC_PLUS_PLUS_COMPATIBILITY
-
-static int external_acc_target( int adrs, int subadrs ) {
-
-	ASSERT( adrs >= MIN_ACCESSORY_ADDRESS );
-	ASSERT( adrs <= MAX_ACCESSORY_ADDRESS );
-	ASSERT( subadrs >= MIN_ACCESSORY_SUBADRS );
-	ASSERT( subadrs <= MAX_ACCESSORY_SUBADRS );
-
-	return((( adrs << 2 ) | subadrs ) + 1 );
-}
-
-#else
-
 //
 //	Define two routines which, given and external accessory number,
 //	return the DCC accessory address and sub-address.
@@ -1338,10 +1332,6 @@ static int internal_acc_subadrs( int target ) {
 
 	return(( target  - 1 ) & 3 );
 }
-
-#endif
-
-#ifndef DCC_PLUS_PLUS_COMPATIBILITY
 
 //
 //	Decoder Function value cache
@@ -1530,8 +1520,6 @@ static byte get_function( int target, byte func, byte val ) {
 	if( ptr->bits[ i ] & b ) return( val );
 	return( 0 );
 }
-
-#endif
 
 //
 //	Storage of Transmission Data
@@ -1931,11 +1919,11 @@ static bool backfill_int_to_text( char *buf, int v, byte len ) {
 //	a range of value types.  Not compiled in unless one of the
 //	debugging macros has been enabled.
 //
-#if defined( DEBUG_BUFFER_MANAGER )||defined( DEBUG_BIT_SLICER )||defined( DEBUG_POWER_MONITOR )
+#if defined( DEBUG_BUFFER_MANAGER )||defined( DEBUG_BIT_SLICER )||defined( DEBUG_CONFIRMATION )
 
 static char to_hex( byte n ) {
-	if(( n >= 0 )&&( n < 10 )) return( '0' + n );
-	if(( n >= 10 )&&( n < 16 )) return( 'A' + ( n - 10 ));
+	if( n < 10 ) return( '0' + n );
+	if( n < 16 ) return(( 'A' - 10 ) + n );
 	return( '?' );
 }
 
@@ -1945,6 +1933,30 @@ static int queue_byte( byte v ) {
 	t[ 0 ] = to_hex( v >> 4 );
 	t[ 1 ] = to_hex( v & 0x0f );
 	t[ 2 ] = EOS;
+	return( console.print( t ));
+}
+
+static int queue_word( word v ) {
+	
+	char	t[ TEXT_BUFFER ];
+
+	t[ 4 ] = EOS;
+	t[ 3 ] = to_hex( v & 0x0f ); v >>= 4;
+	t[ 2 ] = to_hex( v & 0x0f ); v >>= 4;
+	t[ 1 ] = to_hex( v & 0x0f ); v >>= 4;
+	t[ 0 ] = to_hex( v );
+	return( console.print( t ));
+}
+
+static int queue_amps( word v ) {
+	
+	char	t[ TEXT_BUFFER ];
+
+	t[ 4 ] = EOS;
+	t[ 3 ] = '\n';
+	t[ 2 ] = to_hex( v & 0x0f ); v >>= 4;
+	t[ 1 ] = to_hex( v & 0x0f ); v >>= 4;
+	t[ 0 ] = to_hex( v & 0x0f );
 	return( console.print( t ));
 }
 
@@ -2542,7 +2554,6 @@ static void reply_2( char *buf, char code, int a1, int a2 ) {
 	*buf = EOS;
 }
 
-#ifndef DCC_PLUS_PLUS_COMPATIBILITY
 #ifdef PROGRAMMING_TRACK
 
 static void reply_2c( char *buf, char code, int a1, int a2 ) {
@@ -2580,8 +2591,6 @@ static void reply_n( char *buf, char code, int n, int *a ) {
 	buf = _reply_out( buf );
 	*buf = EOS;
 }
-
-#endif
 
 static void reply_3( char *buf, char code, int a1, int a2, int a3 ) {
 	buf = _reply_in( buf, code );
@@ -2624,9 +2633,6 @@ static void flush_error_queue( void ) {
 	//
 	//	The error message is in the form:
 	//
-	//		"<#NN AAAAA>\n"
-	//
-	//	or
 	//		"[ENN AAAAA]\n"
 	//
 	//	which should always be shorter than
@@ -2640,7 +2646,7 @@ static void flush_error_queue( void ) {
 		//	Build error report, and send it only if there
 		//	is enough space.
 		//
-		reply_2( buffer, SELECT_COMPAT( 'E', '#' ), error, arg );
+		reply_2( buffer, 'E', error, arg );
 		//
 		//	Can we send this?
 		//
@@ -2649,7 +2655,18 @@ static void flush_error_queue( void ) {
 			//	Send as space is available.
 			//
 			errors.drop_error();
+
+			//
+			//	If we are debugging the confirmation code
+			//	then there is already way too much data
+			//	heading out of the serial port.  Adding any
+			//	error reports to this will not help.  SO
+			//	we only output the errors if we are not
+			//	debugging the confirmation code.
+			//
+#if !defined( DEBUG_CONFIRMATION )
 			(void)console.print( buffer );
+#endif
 		}
 	}
 }
@@ -2729,13 +2746,10 @@ DRIVER_STATUS {
 };
 #define DRIVER_LOAD struct driver_load
 DRIVER_LOAD {
+	bool		prog;
 	word		compound_value[ COMPOUNDED_VALUES ];
 	DRIVER_STATUS	status;
 	unsigned long	recheck;
-	
-#ifdef DEBUG_POWER_MONITOR
-	int		old_amps;
-#endif
 };
 
 //
@@ -2758,18 +2772,29 @@ static DRIVER_LOAD	*flip_lock = NULL;
 static byte		output_index;
 
 //
-//	Finally, these flags set if the power code into "check
-//	fora confirmation signal" mode in the power consumption,
-//	and records if one has been seen.
+//	These two variable are used only when tracking the power
+//	readings from the programming track and provide the key
+//	input data to the programming enquiry commands on the
+//	presence of a confirmation (or not).
 //
-static bool		confirmation_enabled,
-			load_confirmed;
+static word		confirmation_maxima,
+			confirmation_reports,
+			confirmation_counts;
+
+//
+//	Called when ever a new enquiry command is lined up.
+//
+static void reset_confirmation( bool max_too ) {
+	confirmation_reports = 0;
+	confirmation_counts = 0;
+	if( max_too ) confirmation_maxima = 0;
+}
 
 //
 //	We keep a copy of the last track power reported to
 //	save recalculating it multiple times.
 //
-static int		last_highest_power;
+static word		last_highest_power;
 
 //
 //	This routine is called during setup() to ensure the
@@ -2780,21 +2805,22 @@ static void init_driver_load( void ) {
 	//
 	//	Ensure all monitoring data is empty
 	//
-	output_index = 0;
 	for( byte d = 0; d < SHIELD_OUTPUT_DRIVERS; d++ ) {
+		output_load[ d ].prog = !pgm_read_byte( &( shield_output[ d ].main ));
 		for( byte c = 0; c < COMPOUNDED_VALUES; c++ ) {
 			output_load[ d ].compound_value[ c ] = 0;
 		}
 		output_load[ d ].status = DRIVER_DISABLED;
 		output_load[ d ].recheck = 0;
-#ifdef DEBUG_POWER_MONITOR
-		output_load[ d ].old_amps = 0;
-#endif
 	}
-
+	//
+	//	Reset parameters associated with confirmation detection.
+	//
+	reset_confirmation( true );
 	//
 	//	Start checking current on the first driver.
 	//
+	output_index = 0;
 	MONITOR_ANALOGUE_PIN( pgm_read_byte( &( shield_output[ output_index ].analogue )));
 }
 
@@ -2803,7 +2829,6 @@ static void init_driver_load( void ) {
 //	as changes occur.  This is the routine used to do that.
 //
 static void report_driver_status( void ) {
-#ifndef DCC_PLUS_PLUS_COMPATIBILITY
 	//
 	//	Actually only do this in Native mode.
 	//
@@ -2835,10 +2860,11 @@ static void report_driver_status( void ) {
 			}
 		}
 	}
+#if !defined( DEBUG_CONFIRMATION )
 	reply_n( buffer, 'D', SHIELD_OUTPUT_DRIVERS, v );
 	if( !console.print( buffer )) errors.log_error( COMMAND_REPORT_FAIL, 'D' );
-
 #endif
+
 }
 
 //
@@ -2855,7 +2881,7 @@ static void report_driver_status( void ) {
 //	How this code operates is dependent on the status of driver, outlined
 //	in the following explanation:
 //
-//	o	Each driver output is managed in one of four states:
+//	o	Each driver output is managed in one of five states:
 //
 //		ON		District supplying power, no issues
 //		OFF		District enabled, but temporarily suspended
@@ -2900,6 +2926,13 @@ static void monitor_current_load( int amps ) {
 	dp = &( output_load[ output_index ]);
 
 	//
+	//	If we are debugging this code then output the reading provided.
+	//
+#if defined( DEBUG_CONFIRMATION )
+	if( output_index == DEBUG_CONFIRMATION ) queue_amps( amps );
+#endif
+
+	//
 	//	Check status of the flip lock:
 	//
 	//	*	If flip_lock is the same as this record, then
@@ -2917,50 +2950,18 @@ static void monitor_current_load( int amps ) {
 	ASSERT((( flip_lock == dp )&&( dp->status == DRIVER_FLIPPED ))||(( flip_lock != dp )&&( dp->status != DRIVER_FLIPPED )));
 
 	//
-	//	If overload detection is enabled we do our thing.
+	//	The whole power management system has to be suspended
+	//	for a period of time after a district has been switched
+	//	on.  This is the "grace period" during which time the
+	//	state of the district is "DRIVER_ON_GRACE".
 	//
 	if( dp->status != DRIVER_ON_GRACE ) {
-		if( confirmation_enabled ) {
-			//
-			//	Confirmation is being tested, so we
-			//	modify the average as little as
-			//	possible to keep base line values
-			//	stable.
-			//
-			for( byte i = 0; i <= SHORT_AVERAGE_VALUE; i++ ) {
-				amps = dp->compound_value[ i ] = ( amps + dp->compound_value[ i ]) >> 1;
-			}
-			
-		}
-		else {
-			//
-			//	Compound the new figure into the averages.
-			//
-			for( byte i = 0; i < COMPOUNDED_VALUES; i++ ) {
-				amps = dp->compound_value[ i ] = ( amps + dp->compound_value[ i ]) >> 1;
-			}
-		}
-
-#ifdef DEBUG_POWER_MONITOR
 		//
-		//	Display to Serial power data if the debug
-		//	flag DEBUG_POWER_MONITOR is set.
+		//	Compound the new figure into the averages.
 		//
-		if( amps != dp->old_amps ) {
-			dp->old_amps = amps;
-
-			console.print( "AMPS " );
-			console.print( output_index );
-			console.print( "=" );
-			console.print( amps );
-			for( byte i = 0; i < COMPOUNDED_VALUES; i++ ) {
-				console.print( "_" );
-				console.print( dp->compound_value[ i ]);
-			}
-			console.println( ";" );
+		for( byte i = 0; i < COMPOUNDED_VALUES; i++ ) {
+			amps = dp->compound_value[ i ] = ( amps + dp->compound_value[ i ]) >> 1;
 		}
-#endif
-
 		//
 		//	The code in the remainder of this routine needs to cover
 		//	all of the cases outlined in the table described above.
@@ -2969,7 +2970,7 @@ static void monitor_current_load( int amps ) {
 		//
 		//	This covers off all of the rows under the column "Spike".
 		// 
-		if( dp->compound_value[ SPIKE_AVERAGE_VALUE ] >  INSTANT_CURRENT_LIMIT ) {
+		if( dp->compound_value[ SPIKE_AVERAGE_VALUE ] > INSTANT_CURRENT_LIMIT ) {
 			//
 			//	How we handle this is dependent on what
 			//	has happened before.
@@ -3013,7 +3014,7 @@ static void monitor_current_load( int amps ) {
 						//
 						//	For a direct port shield we simply "flip" the corresponding
 						//	bits in the output_mask_on and output_mask_off bit masks, once
-						//	we have worked out which bit to flip.
+						//	we have worked out which bits to flip.
 						//
 						mask = pgm_read_byte( &( shield_output[ output_index ].direction ));
 						//
@@ -3213,24 +3214,37 @@ static void monitor_current_load( int amps ) {
 			}
 			else {
 				//
-				//	Lastly, this is a case where the power load reported
-				//	is "nominal"; in the normal operating range of values.
+				//	This is the "nominal" operation code where the load
+				//	reading received is within all normal bounds.
 				//
-				//	Are we seeing a "reply" from an on-track device?
-				//
-				//	Before we check out the different between the short term average
-				//	and the long term average, we should check that it is actually
-				//	larger than the long term average.
-				//
-				word	a, b;
 
-				if(( a = dp->compound_value[ SHORT_AVERAGE_VALUE ]) > ( b = dp->compound_value[ COMPOUNDED_VALUES-1 ])) {
-					if(( a - b ) > MINIMUM_DELTA_AMPS ) {
-						//
-						//	We believe that we have seen a confirmation.
-						//
-						load_confirmed = true;
-					}
+				//
+				//	We need to perform the confirmation code, but only if we
+				//	executing against the programming track.
+				//
+				if( dp->prog ) {
+					word	a;
+
+					//
+					//	Count all of the report load values.
+					//
+					confirmation_reports++;
+					//
+					//	Pick out the meaningful components from the compounded
+					//	averages table.
+					//
+					a = dp->compound_value[ COMPOUND_INDEX ];
+					//
+					//	Update our "maximum" value.  We will use this to help decide
+					//	we are seeing
+					//
+					if( a > confirmation_maxima ) confirmation_maxima = a;
+					//
+					//	Lastly, this is a case where the power load reported
+					//	is "nominal" (ie. in the normal operating range of values),
+					//	are we seeing a "reply" from an on-track device?
+					//
+					if( a > ( confirmation_maxima >> 1 )) confirmation_counts++;
 				}
 				//
 				//	Finally, power level are not of any concern, but still
@@ -3254,7 +3268,7 @@ static void monitor_current_load( int amps ) {
 						//	to the following case to complete the
 						//	common actions.
 						//
-						__attribute__(( fallthrough ));
+						// __attribute__(( fallthrough ));
 					}
 					case DRIVER_BLOCKED: {
 						//
@@ -3326,7 +3340,7 @@ static void monitor_current_load( int amps ) {
 }
 
 //
-//	Routine called by the periodic timer code to report
+//	Routine called periodically (if enabled) to report
 //	track power dynamically.
 //
 static void report_track_power( void ) {
@@ -3337,11 +3351,11 @@ static void report_track_power( void ) {
 	//
 	last_highest_power = 0;
 	for( byte i = 0; i < SHIELD_OUTPUT_DRIVERS; i++ ) {
-		int t = output_load[ i ].compound_value[ COMPOUNDED_VALUES-1 ];
+		word t = output_load[ i ].compound_value[ COMPOUNDED_VALUES-1 ];
 		if( t > last_highest_power ) last_highest_power = t;
 	}
-	reply_1( buffer, SELECT_COMPAT( 'L', 'a' ), last_highest_power );
-	if( !console.print( buffer )) errors.log_error( COMMAND_REPORT_FAIL, SELECT_COMPAT( 'L', 'a' ));
+	reply_1( buffer, 'L', last_highest_power );
+	if( !console.print( buffer )) errors.log_error( COMMAND_REPORT_FAIL, 'L' );
 }
 
 //
@@ -3491,7 +3505,6 @@ static byte power_on_main_track( void ) {
 //
 //
 
-#ifndef DCC_PLUS_PLUS_COMPATIBILITY
 #ifdef PROGRAMMING_TRACK
 
 static byte power_on_prog_track( void ) {
@@ -3581,12 +3594,12 @@ static byte power_on_prog_track( void ) {
 		}
 	}
 #endif
+	reset_confirmation( true );
 	report_driver_status();
 	global_power_state = GLOBAL_POWER_PROG;
 	return( prev != GLOBAL_POWER_PROG );
 }
 
-#endif
 #endif
 
 //
@@ -3728,8 +3741,22 @@ static void management_service_routine( void ) {
 			//	for re-use, we should check to see if a confirmation is required.
 			//
 			if( manage->reply == REPLY_ON_CONFIRM ) {
+				bool	confirmed;
 				char	*hash;
 
+				//
+				//	Determine if there is a confirmation to consider.
+				//
+				console.println( confirmation_maxima );
+				console.println( confirmation_reports );
+				console.println( confirmation_counts );
+				//
+				if( confirmation_counts ) {
+					confirmed = ( confirmation_reports / confirmation_counts ) < CONFIRMATION_RATIO;
+				}
+				else {
+					confirmed = false;
+				}
 				//
 				//	Two actions here:
 				//
@@ -3745,24 +3772,15 @@ static void management_service_routine( void ) {
 					//
 					//	Found, so update hash and send.
 					//
-					*hash = load_confirmed? '1': '0';
-					if( !console.print( manage->contains )) {
-						errors.log_error( COMMAND_REPORT_FAIL, manage->target );
-					}
+					*hash = confirmed? '1': '0';
+					if( !console.print( manage->contains )) errors.log_error( COMMAND_REPORT_FAIL, manage->target );
 				}
-				else if( load_confirmed ) {
+				else if( confirmed ) {
 					//
 					//	Only send confirmation if confirmation was received
 					//
-					if( !console.print( manage->contains )) {
-						errors.log_error( COMMAND_REPORT_FAIL, manage->target );
-					}
+					if( !console.print( manage->contains )) errors.log_error( COMMAND_REPORT_FAIL, manage->target );
 				}
-				//
-				//	Clear confirmation mode.
-				//
-				confirmation_enabled = false;
-
 			}
 			//
 			//	Now mark empty.
@@ -3862,8 +3880,6 @@ static void link_main_buffers( void ) {
 #endif
 }
 
-#ifndef DCC_PLUS_PLUS_COMPATIBILITY
-
 #ifdef PROGRAMMING_TRACK
 
 static void link_prog_buffers( void ) {
@@ -3877,7 +3893,6 @@ static void link_prog_buffers( void ) {
 	interrupts();
 }
 
-#endif
 #endif
 
 //
@@ -3941,8 +3956,9 @@ static void initialise_data_structures( void ) {
 	//
 	//	Initialise confirmation variables.
 	//
-	confirmation_enabled = false;
-	load_confirmed = false;
+	confirmation_maxima = 0;
+	confirmation_reports = 0;
+	confirmation_counts = 0;
 }
 
 void setup( void ) {
@@ -4005,12 +4021,7 @@ void setup( void ) {
 	//	Set up the data structures.
 	//
 	initialise_data_structures();
-
-#ifndef DCC_PLUS_PLUS_COMPATIBILITY
-
 	init_function_cache();
-	
-#endif
 
 	//
 	//	Set up the Interrupt Service Routine
@@ -4262,7 +4273,7 @@ static void display_lcd_updates( void ) {
 			if( backfill_int_to_text( buffer+1, last_highest_power, LCD_DISPLAY_STATUS_WIDTH-2 )) {
 				memset( buffer+1, HASH, LCD_DISPLAY_STATUS_WIDTH-2 );
 			}
-			buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_COMPAT( '|', ':' );
+			buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = '|';
 			lcd.setPosn( LCD_DISPLAY_STATUS_COLUMN, 0 );
 			lcd.writeBuf( buffer, LCD_DISPLAY_STATUS_WIDTH );
 			break;
@@ -4305,7 +4316,7 @@ static void display_lcd_updates( void ) {
 			if( backfill_int_to_text( buffer+3, c, LCD_DISPLAY_STATUS_WIDTH-4 )) {
 				memset( buffer+3, HASH, LCD_DISPLAY_STATUS_WIDTH-4 );
 			}
-			buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_COMPAT( '|', ':' );
+			buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = '|';
 			lcd.setPosn( LCD_DISPLAY_STATUS_COLUMN, 1 );
 			lcd.writeBuf( buffer, LCD_DISPLAY_STATUS_WIDTH );
 			break;
@@ -4323,7 +4334,7 @@ static void display_lcd_updates( void ) {
 			if( backfill_int_to_text( buffer+1, mul_div<int>( lcd_statistic_packets, 1000, LCD_UPDATE_INTERVAL ), LCD_DISPLAY_STATUS_WIDTH-2 )) {
 				memset( buffer+1, HASH, LCD_DISPLAY_STATUS_WIDTH-2 );
 			}
-			buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_COMPAT( '|', ':' );
+			buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = '|';
 			lcd.setPosn( LCD_DISPLAY_STATUS_COLUMN, 2 );
 			lcd.writeBuf( buffer, LCD_DISPLAY_STATUS_WIDTH );
 			lcd_statistic_packets = 0;
@@ -4371,7 +4382,7 @@ static void display_lcd_updates( void ) {
 					buffer[ LCD_DISPLAY_STATUS_WIDTH-2 ] = odd? 'h': SPACE;
 				}
 			}
-			buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = SELECT_COMPAT( '|', ':' );
+			buffer[ LCD_DISPLAY_STATUS_WIDTH-1 ] = '|';
 			lcd.setPosn( LCD_DISPLAY_STATUS_COLUMN, 3 );
 			lcd.writeBuf( buffer, LCD_DISPLAY_STATUS_WIDTH );
 			break;
@@ -4755,8 +4766,6 @@ static byte compose_accessory_change( byte *command, int adrs, int subadrs, int 
 	return( 2 );
 }
 
-#ifndef DCC_PLUS_PLUS_COMPATIBILITY
-
 //
 //	Create a Function set/reset command, return number of bytes used.
 //
@@ -4855,6 +4864,119 @@ static byte compose_function_change( byte *command, int adrs, int func, int stat
 	command[ 0 ] = 0xff;
 	command[ 1 ] = 0x00;
 	return( 2 );
+}
+
+//
+//	Create one part of the bulk function setting command.  Which part
+//	is controlled by the "state" variable.  For creating the series of
+//	function setting commands state with start at 0 and progress through
+//	small positive integers.  To mark the end of the commands a length of
+//	0 is returned
+//
+static byte compose_function_block( byte *command, int *state, int adrs, int *fn, int count ) {
+	byte	len;
+
+	ASSERT( command != NULL );
+	ASSERT( state != NULL );
+	ASSERT( *state >= 0  );
+	ASSERT(( adrs >= MINIMUM_DCC_ADDRESS )&&( adrs <= MAXIMUM_DCC_ADDRESS ));
+	ASSERT( fn != NULL );
+	ASSERT( count >= 0 );
+	ASSERT(( count * 8 ) > MAX_FUNCTION_NUMBER );
+	
+	//
+	//	Function has changed value, update the corresponding decoder.
+	//
+	if( adrs > MAXIMUM_SHORT_ADDRESS ) {
+		command[ 0 ] = 0b11000000 | ( adrs >> 8 );
+		command[ 1 ] = adrs & 0b11111111;
+		len = 2;
+	}
+	else {
+		command[ 0 ] = adrs;
+		len = 1;
+	}
+	//
+	//	Now the value of the state variable tells us which DCC funciton
+	//	setting command we need to create (which we also auto increment
+	//	in preparationn for the next call).
+	//
+	switch( (*state)++ ) {
+		//
+		//	I know the bit manipulation code in the following is
+		//	really inefficient, but it is clear and easy to see that
+		//	it's correct.  For the time being this is more important
+		//	than fast code which is wrong.
+		//
+		case 0: {
+			//
+			//	F0-F4		100[F0][F4][F3][F2][F1]
+			//
+			command[ len++ ] =	0x80	| (( fn[0] & 0x01 )? 0x10: 0 )
+							| (( fn[0] & 0x02 )? 0x01: 0 )
+							| (( fn[0] & 0x04 )? 0x02: 0 )
+							| (( fn[0] & 0x08 )? 0x04: 0 )
+							| (( fn[0] & 0x10 )? 0x08: 0 );
+			break;
+		}
+		case 1: {
+			//
+			//	F5-F8		1011[F8][F7][F6][F5]
+			//
+			command[ len++ ] =	0xb0	| (( fn[0] & 0x20 )? 0x01: 0 )
+							| (( fn[0] & 0x40 )? 0x02: 0 )
+							| (( fn[0] & 0x80 )? 0x04: 0 )
+							| (( fn[1] & 0x01 )? 0x08: 0 );
+			break;
+		}
+		case 2: {
+			//
+			//	F9-F12		1010[F12][F11][F10][F9]
+			//
+			command[ len++ ] =	0xa0	| (( fn[1] & 0x02 )? 0x01: 0 )
+							| (( fn[1] & 0x04 )? 0x02: 0 )
+							| (( fn[1] & 0x08 )? 0x04: 0 )
+							| (( fn[1] & 0x10 )? 0x08: 0 );
+			break;
+		}
+		case 3: {
+			//
+			//	F13-F20		11011110, [F20][F19][F18][F17][F16][F15][F14][F13]
+			//
+			command[ len++ ] =	0xde;
+			command[ len++ ] =		  (( fn[1] & 0x20 )? 0x01: 0 )
+							| (( fn[1] & 0x40 )? 0x02: 0 )
+							| (( fn[1] & 0x80 )? 0x04: 0 )
+							| (( fn[2] & 0x01 )? 0x08: 0 )
+							| (( fn[2] & 0x02 )? 0x10: 0 )
+							| (( fn[2] & 0x04 )? 0x20: 0 )
+							| (( fn[2] & 0x08 )? 0x40: 0 )
+							| (( fn[2] & 0x10 )? 0x80: 0 );
+			break;
+		}
+		case 4: {
+			//
+			//	F21-F28		11011111, [F28][F27][F26][F25][F24][F23][F22][F21]
+			//
+			command[ len++ ] =	0xdf;
+			command[ len++ ] =		  (( fn[2] & 0x20 )? 0x01: 0 )
+							| (( fn[2] & 0x40 )? 0x02: 0 )
+							| (( fn[2] & 0x80 )? 0x04: 0 )
+							| (( fn[3] & 0x01 )? 0x08: 0 )
+							| (( fn[3] & 0x02 )? 0x10: 0 )
+							| (( fn[3] & 0x04 )? 0x20: 0 )
+							| (( fn[3] & 0x08 )? 0x40: 0 )
+							| (( fn[3] & 0x10 )? 0x80: 0 );
+			break;
+		}
+		default: {
+			return( 0 );
+		}
+	}
+	//
+	//	Done!
+	//
+	return( len );
 }
 
 //
@@ -4979,11 +5101,6 @@ static byte compose_verify_cv_bit( byte *command, int cv, int bnum, int value ) 
 #endif
 
 //
-//	End non-compatible
-//
-#endif
-
-//
 //	Liquid Crystal Display summaries
 //	================================
 
@@ -5069,39 +5186,6 @@ static void lcd_summary_accessory( char *buffer, int adrs, int subadrs, int stat
 
 }
 
-#ifdef DCC_PLUS_PLUS_COMPATIBILITY
-
-//
-//	DDC Generator Compatibility Command LCD summary routines.
-//	---------------------------------------------------------
-//
-
-//
-//	Summarise function application to a target
-//
-static void lcd_summary_function( char *buffer, int target ) {
-	//
-	//	Fill in the target number.
-	//
-	if( backfill_int_to_text( buffer, target, 4 )) memset( buffer, HASH, 4 );
-
-#if LCD_DISPLAY_BUFFER_WIDTH >= 5
-	//
-	//	The actions taken
-	//
-	buffer[ 4 ] = 'A';
-#endif
-
-#if LCD_DISPLAY_BUFFER_WIDTH > 5
-	//
-	//	Space fill the tail area.
-	//
-	memset( buffer + 5, SPACE, LCD_DISPLAY_BUFFER_WIDTH - 5 );
-#endif
-
-}
-
-#else
 
 //
 //	DDC Generator Native Command LCD summary routines.
@@ -5285,289 +5369,176 @@ static void lcd_summary_readcv( char *buffer, int cv, int bnum, int value ) {
 //
 #endif
 
-//
-//	End DCC Compatibility
-//
 #endif
 
-//
-//	End LCD Display Enabled
-#endif
 	
 //
-//	Command Summary
-//	===============
+//	DCC Generator Command Summary
+//	=============================
 //
-
-#ifdef DCC_PLUS_PLUS_COMPATIBILITY
-
-	//
-	//	DCC Plus Plus Command Summary
-	//	=============================
-	//
-	//	The following summary provides the sub-set of DCC commands
-	//	supported by the DCCpp Arduino Firmware which this code will
-	//	try to emulate.
-	//
-	//	Descriptions of the DCC Packet format will not include the
-	//	pre-amble, the inter-byte bits nor the parity byte.
-	//
-	//	Multi-function address byte(s) are defined as one of the following
-	//	two formats (represented in binary):
-	//
-	//		Short Address range (1-127):	0AAAAAAA
-	//
-	//		Long Address range (1-10239):	11AAAAAA AAAAAAAA
-	//
-	//
-	//
-	//	Note:	The top 6 bits of the long address are restricted (by the
-	//		DCC standard) to be from 000000 to 100111 (39 decimal).
-	//		As a result the largest long address is 10 0111 1111 1111
-	//		translating to 10239.
-	//
-	//
-	//	Set Engine Throttle (126-Step)
-	//	------------------------------
-	//    
-	//		<t BUFFER ADRS SPEED DIR>
-	//
-	//		BUFFER:	An internal buffer number, from 1 through to MOBILE_TRANS_BUFFERS
-	//		ADRS:	The short (1-127) or long (128-10239) address of the engine decoder
-	//		SPEED:	Throttle speed from 0-126, or -1 for emergency stop
-	//		DIR:	1=forward, 0=reverse
-	//    
-	//	returns:
-	//
-	//		<T BUFFER SPEED DIRECTION>
-	//
-	//	DCC Packet format:
-	//
-	//		[0AAAAAAA|11AAAAAA AAAAAAAA] 00111111 DSSSSSSS
-	//
-	//	Where:
-	//		A:		Address data.
-	//		D:		Direction; 1=forwards, 0=backwards.
-	//		SSSSSSS:	Speed; 0=stop, 1=emergency stop, or target speed+1
-	//
-	//
-	//
-	//	Modify Engine Function F0-F28
-	//	-----------------------------    
-	//
-	//		<f ADRS BYTE1 [BYTE2]>
-	//
-	//		ADRS:	The short (1-127) or long (128-10239) address of the engine decoder
-	//
-	//	In the following options [Fn] represents the bit for function "n", where a 1 would
-	//	activate it and a 0 disable it (byte values shown in binary).
-	//
-	//	To set functions F0-F4:
-	//      
-	//		BYTE1:  100[F0][F4][F3][F2][F1]
-	//   
-	//	To set functions F5-F8:
-	//   
-	//		BYTE1:  1011[F8][F7][F6][F5]
-	//   
-	//	To set functions F9-F12:
-	//   
-	//		BYTE1:  1010[F12][F11][F10][F9]
-	//   
-	//	To set functions F13-F20:
-	//   
-	//		BYTE1: 11011110 
-	//		BYTE2: [F20][F19][F18][F17][F16][F15][F14][F13]
-	//   
-	//	To set functions F21-F28:
-	//   
-	//		BYTE1: 11011111
-	//		BYTE2: [F28][F27][F26][F25][F24][F23][F22][F21]
-	//   
-	//	Returns: Nothing
-	//
-	//	DCC Packet format:
-	//
-	//		[0AAAAAAA|11AAAAAA AAAAAAAA] {BYTE1} [{BYTE2}]
-	//
-	//	The nature of this functions interface lends itself for abuse as it simply
-	//	copies the supplied bytes into the output packet.  The caller of this function
-	//	could supply any data and so perform any function.
-	// 
-	//
-	//	Operate Accessory Decoder
-	//	-------------------------    
-	//
-	//		<a ADRS SUBADRS STATE>
-	//
-	//		ADRS:	The primary address of the decoder (0-511)
-	//		SUBADRS:The sub-address of the decoder (0-3)
-	//		STATE:	1=on (set), 0=off (clear)
-	//
-	//	Returns: Nothing
-	//
-	//	DCC Packet format:
-	//
-	//		10AAAAAA 1aaa1SSC
-	//
-	//
-	//	Where:
-	//
-	//		aaaAAAAAA:	Accessory address (a's are ~'d)
-	//		SS:		Sub address
-	//		C:		Target state 1=on, 0=off
-	//
-	//
-	//	Power ON/OFF to the track
-	//	-------------------------
-	//
-	//	Neither of these commands have any functional scope in the DCC
-	//	protocol as these directly operate against the Arduino itself.
-	//
-	//	Power ON the track(s):
-	//
-	//		<1>
-	//
-	//	Returns: <p1>
-	//
-	//	Power OFF the track(s):
-	//
-	//		<0>
-	//
-	//	Returns: <p0>
-	//
-
-#else
-
-	//
-	//	DCC Generator Command Summary
-	//	=============================
-	//
-	//	For the moment the following commands are described in outline
-	//	only; details to be provided.
-	//
-	//	Mobile decoder set speed and direction
-	//	--------------------------------------
-	//
-	//	[M ADRS SPEED DIR] -> [M ADRS SPEED DIR]
-	//
-	//		ADRS:	The short (1-127) or long (128-10239) address of the engine decoder
-	//		SPEED:	Throttle speed from 0-126, or -1 for emergency stop
-	//		DIR:	1=Forward, 0=Reverse
-	//
-	//	Accessory decoder set state
-	//	---------------------------
-	//
-	//	[A ADRS STATE] -> [A ADRS STATE]
-	//
-	//		ADRS:	The combined address of the decoder (1-2048)
-	//		STATE:	1=on (set), 0=off (clear)
-	//
-	//	Mobile decoder set function state
-	//	---------------------------------
-	//
-	//	[F ADRS FUNC VALUE] -> [F ADRS FUNC STATE]
-	//
-	//		ADRS:	The short (1-127) or long (128-10239) address of the engine decoder
-	//		FUNC:	The function number to be modified (0-21)
-	//		VALUE:	1=Enable, 0=Disable
-	//		STATE:	1=Confirmed, 0=Failed
-	//	
-	//	Enable/Disable Power to track
-	//	-----------------------------
-	//
-	//	[P STATE] -> [P STATE]
-	//
-	//		STATE: 1=On, 0=Off
-	//
-	//	Set CV value (Programming track)
-	//	--------------------------------
-	//
-	//	[S CV VALUE] -> [S CV VALUE STATE]
-	//
-	//		CV:	Number of CV to set (1-1024)
-	//		VALUE:	8 bit value to apply (0-255)
-	//		STATE:	1=Confirmed, 0=Failed
-	//
-	//	Set CV bit value (Programming track)
-	//	------------------------------------
-	//
-	//	Set the specified CV bit with the supplied
-	//	value.
-	//
-	//	[U CV BIT VALUE] -> [U CV BIT VALUE STATE]
-	//
-	//		CV:	Number of CV to set (1-1024)
-	//		BIT:	Bit number (0 LSB - 7 MSB)
-	//		VALUE:	0 or 1
-	//		STATE:	1=Confirmed, 0=Failed
-	//
-	//
-	//	Verify CV value (Programming track)
-	//	-----------------------------------
-	//
-	//	[V CV VALUE] -> [V CV VALUE STATE]
-	//
-	//		CV:	Number of CV to set (1-1024)
-	//		VALUE:	8 bit value to apply (0-255)
-	//		STATE:	1=Confirmed, 0=Failed
-	//
-	//	Verify CV bit value (Programming track)
-	//	---------------------------------------
-	//
-	//	Compare the specified CV bit with the supplied
-	//	value, if they are the same, return 1, otherwise
-	//	(or in the case of failure) return 0.
-	//
-	//	[R CV BIT VALUE] -> [R CV BIT VALUE STATE]
-	//
-	//		CV:	Number of CV to set (1-1024)
-	//		BIT:	Bit number (0 LSB - 7 MSB)
-	//		VALUE:	0 or 1
-	//		STATE:	1=Confirmed, 0=Failed
-	//
-	//	Asynchronous data returned from the firmware
-	//	============================================
-	//
-	//	Change in Power state:
-	//
-	//		-> [P STATE]
-	//
-	//	Current power consumption of the system:
-	//
-	//		-> [L LOAD]
-	//
-	//		LOAD: Figure between 0 and 1023
-	//
-	//	Report status of individual districts
-	//
-	//		[D a b ...]
-	//
-	//		Reported numbers (a, b, c ...) reflect
-	//		the individual districts A, B C etc (independent
-	//		of the role of the district).  The values
-	//		provided follow the following table:
-	//
-	//			0	Disabled
-	//			1	Enabled
-	//			2	Phase Flipped
-	//			3	Overloaded
-	//
-	//	Error detected by the firmware
-	//
-	//		-> [E ERR ARG]
-	//
-	//		ERR:	Error number giving nature of problem
-	//		ARG:	Additional information data, nature
-	//			dependant on the error number.
-	//
-
-#endif
+//	For the moment the following commands are described in outline
+//	only; details to be provided.
+//
+//	Mobile decoder set speed and direction
+//	--------------------------------------
+//
+//	[M ADRS SPEED DIR] -> [M ADRS SPEED DIR]
+//
+//		ADRS:	The short (1-127) or long (128-10239) address of the engine decoder
+//		SPEED:	Throttle speed from 0-126, or -1 for emergency stop
+//		DIR:	1=Forward, 0=Reverse
+//
+//	Accessory decoder set state
+//	---------------------------
+//
+//	[A ADRS STATE] -> [A ADRS STATE]
+//
+//		ADRS:	The combined address of the decoder (1-2048)
+//		STATE:	1=on (set), 0=off (clear)
+//
+//	Mobile decoder set function state
+//	---------------------------------
+//
+//	[F ADRS FUNC VALUE] -> [F ADRS FUNC STATE]
+//
+//		ADRS:	The short (1-127) or long (128-10239) address of the engine decoder
+//		FUNC:	The function number to be modified (0-21)
+//		VALUE:	1=Enable, 0=Disable
+//		STATE:	1=Confirmed, 0=Failed
+//	
+//	Write Mobile State (Operations Track)
+//	-------------------------------------
+//
+//	Overwrite the entire "state" of a specific mobile decoder
+//	with the information provided in the arguments.
+//
+//	While this is provided as a single DCC Generator command
+//	there is no single DCC command which implements this functionality
+//	so consequently the command has to be implemented as a tightly
+//	coupled sequence of commands.  This being said, thhe implementation
+//	of the commannd should ensure that either *all* of these commands
+//	are transmitted or *none* of them are.  While this does not
+//	guarantee that the target decoder gets all of the updates
+//	it does increase the likelihood that an incomplete update is
+//	successful.
+//
+//	[W ADRS SPEED DIR FNA FNB FNC FND] -> [W ADRS SPEED DIR FNA FNB FNC FND]
+//
+//		ADRS:	The short (1-127) or long (128-10239) address of the engine decoder
+//		SPEED:	Throttle speed from 0-126, or -1 for emergency stop
+//		DIR:	1=Forward, 0=Reverse
+//		FNA:	Bit mask (in decimal) for Functions 0 through 7
+//		FNB:	... Functions 8 through 15
+//		FNC:	... Functions 16 through 23
+//		FND:	... Functions 24 through 28 (bit positions for 29 through 31 ignored)
+//
+//	Enable/Disable Power to track
+//	-----------------------------
+//
+//	[P STATE] -> [P STATE]
+//
+//		STATE: 1=On, 0=Off
+//
+//	Set CV value (Programming track)
+//	--------------------------------
+//
+//	[S CV VALUE] -> [S CV VALUE STATE]
+//
+//		CV:	Number of CV to set (1-1024)
+//		VALUE:	8 bit value to apply (0-255)
+//		STATE:	1=Confirmed, 0=Failed
+//
+//	Set CV bit value (Programming track)
+//	------------------------------------
+//
+//	Set the specified CV bit with the supplied
+//	value.
+//
+//	[U CV BIT VALUE] -> [U CV BIT VALUE STATE]
+//
+//		CV:	Number of CV to set (1-1024)
+//		BIT:	Bit number (0 LSB - 7 MSB)
+//		VALUE:	0 or 1
+//		STATE:	1=Confirmed, 0=Failed
+//
+//
+//	Verify CV value (Programming track)
+//	-----------------------------------
+//
+//	[V CV VALUE] -> [V CV VALUE STATE]
+//
+//		CV:	Number of CV to set (1-1024)
+//		VALUE:	8 bit value to apply (0-255)
+//		STATE:	1=Confirmed, 0=Failed
+//
+//	Verify CV bit value (Programming track)
+//	---------------------------------------
+//
+//	Compare the specified CV bit with the supplied
+//	value, if they are the same, return 1, otherwise
+//	(or in the case of failure) return 0.
+//
+//	[R CV BIT VALUE] -> [R CV BIT VALUE STATE]
+//
+//		CV:	Number of CV to set (1-1024)
+//		BIT:	Bit number (0 LSB - 7 MSB)
+//		VALUE:	0 or 1
+//		STATE:	1=Confirmed, 0=Failed
+//
+//	Accessing EEPROM configurable constants
+//	---------------------------------------
+//
+//		[Q] -> [Q N]			Return number of tunable constants
+//		[Q C] ->[Q C V NAME]		Access a specific constant C (range 0..N-1)
+//		[Q C V V] -> [Q C V NAME]	Set a specific constant C to value V,
+//						second V is to prevent accidental
+//						update.
+//		[Q -1 -1] -> [Q -1 -1]		Reset all constants to default.
+//
+//
+//	Asynchronous data returned from the firmware
+//	============================================
+//
+//	Change in Power state:
+//
+//		-> [P STATE]
+//
+//	Current power consumption of the system:
+//
+//		-> [L LOAD]
+//
+//		LOAD: Figure between 0 and 1023
+//
+//	Report status of individual districts
+//
+//		[D a b ...]
+//
+//		Reported numbers (a, b, c ...) reflect
+//		the individual districts A, B C etc (independent
+//		of the role of the district).  The values
+//		provided follow the following table:
+//
+//			0	Disabled
+//			1	Enabled
+//			2	Phase Flipped
+//			3	Overloaded
+//
+//	Error detected by the firmware
+//
+//		-> [E ERR ARG]
+//
+//		ERR:	Error number giving nature of problem
+//		ARG:	Additional information data, nature
+//			dependant on the error number.
+//
 
 //
 //	The maximum number of arguments after the command letter.
 //
-#define MAX_DCC_ARGS	4
+//	New (vers 1.3.4) 'W' command has 7 arguments post command
+//	letter.
+//
+#define MAX_DCC_ARGS	7
 
 //
 //	Simple compiler time check so we do not need to do pointless
@@ -5595,6 +5566,15 @@ static void scan_line( char *buf ) {
 	//
 	byte	command[ MAXIMUM_DCC_COMMAND ];
 
+#if defined( DEBUG_CONFIRMATION )
+	//
+	//	When debugging the command confirmation code
+	//	we need to see both the command sent as well
+	//	as the reply.
+	//
+	console.println( buf );
+#endif
+
 	//
 	//	Take the data proved and parse it into useful pieces.
 	//
@@ -5608,45 +5588,6 @@ static void scan_line( char *buf ) {
 			//	Power management commands
 			//	-------------------------
 			//
-#ifdef DCC_PLUS_PLUS_COMPATIBILITY
-			case '0':
-			case '1': {
-				char	reply[ 8 ];
-
-				//
-				//	<1>	Turn track power on
-				//	<0>	Turn track power off
-				//
-				if( args != 0 ) {
-					errors.log_error( INVALID_ARGUMENT_COUNT, cmd );
-					break;
-				}
-				if( cmd == '1' ) {
-					if( power_on_main_track()) link_main_buffers();
-					reply_1( reply, 'p', 1 );
-					if( !console.print( reply )) errors.log_error( COMMAND_REPORT_FAIL, cmd );
-				}
-				else {
-					(void)power_off_tracks();
-					reply_1( reply, 'p', 0 );
-					if( !console.print( reply )) errors.log_error( COMMAND_REPORT_FAIL, cmd );
-				}
-				
-				break;
-			}
-			case 'c': {
-				//
-				//	Report power
-				//
-				if( args != 0 ) {
-					errors.log_error( INVALID_ARGUMENT_COUNT, cmd );
-					break;
-				}
-				report_track_power();
-				break;
-			}
-
-#else
 			case 'P': {
 				char	reply[ 8 ];
 
@@ -5706,104 +5647,11 @@ static void scan_line( char *buf ) {
 				}
 				break;
 			}
-#endif
 			
 			//
 			//	Cab/Mobile decoder commands
 			//	---------------------------
 			//
-#ifdef DCC_PLUS_PLUS_COMPATIBILITY
-			case 't': {
-				PENDING_PACKET	**tail;
-				TRANS_BUFFER	*buf;
-				int		buffer,
-						target,
-						speed,
-						dir;
-
-				//
-				//	Set throttle speed for engine ADRS in buffer BUFFER.
-				//
-				//	<t BUFFER ADRS SPEED DIR>
-				//
-				//	[0AAAAAAA|11AAAAAA AAAAAAAA] 00111111 DSSSSSSS
-				//
-				if( args != 4 ) {
-					errors.log_error( INVALID_ARGUMENT_COUNT, cmd );
-					break;
-				}
-				//
-				//	Save command arguments.
-				//
-				buffer = arg[ 0 ];
-				target = arg[ 1 ];
-				speed = arg[ 2 ];
-				dir = arg[ 3 ];
-				//
-				//	Verify ranges
-				//
-				if(( buffer < 1 )||( buffer > MOBILE_TRANS_BUFFERS )) {
-					errors.log_error( INVALID_BUFFER_NUMBER, buffer );
-					break;
-				}
-				if(( target < MINIMUM_DCC_ADDRESS )||( target > MAXIMUM_DCC_ADDRESS )) {
-					errors.log_error( INVALID_ADDRESS, target );
-					break;
-				}
-				if((( speed < MINIMUM_DCC_SPEED )||( speed > MAXIMUM_DCC_SPEED ))&&( speed != EMERGENCY_STOP )) {
-					errors.log_error( INVALID_SPEED, speed );
-					break;
-				}
-				if(( dir != DCC_FORWARDS )&&( dir != DCC_BACKWARDS )) {
-					errors.log_error( INVALID_DIRECTION, dir );
-					break;
-				}
-				//
-				//	Locate target buffer, and prepare pending list.
-				//
-				buf = circular_buffer + ( MOBILE_BASE_BUFFER + buffer - 1 );
-				buf->pending = release_pending_recs( buf->pending, false );
-				tail = &( buf->pending );
-				//
-				//	Check buffer is in usable state.
-				//
-				if(( buf->state != TBS_RUN )&&( buf->state != TBS_EMPTY )) {
-					//
-					//	We cannot modify this buffer.
-					//
-					errors.log_error( TRANSMISSION_BUSY, cmd );
-					break;
-				}
-				//
-				//	Now create and append the command to the pending list.
-				//
-				if( !create_pending_rec( &tail, target, 0, DCC_SHORT_PREAMBLE, 1, compose_motion_packet( command, target, speed, dir ), command )) {
-					//
-					//	Report that no pending record has been created.
-					//
-					errors.log_error( COMMAND_QUEUE_FAILED, cmd );
-					break;
-				}
-
-#ifdef LCD_DISPLAY_ENABLE
-				//
-				//	Complete LCD summary.
-				//
-				lcd_summary_motion( buf->display, target, speed, dir );
-#endif
-
-				//
-				//	Construct the reply to send when we get send
-				//	confirmation and pass to the manager code to
-				//	insert the new packet into the transmission
-				//	process.
-				//
-				reply_3( buf->contains, 'T', buffer, speed, dir );
-				buf->reply = REPLY_ON_SEND;
-				buf->state = ( buf->state == TBS_EMPTY )? TBS_LOAD: TBS_RELOAD;
-				break;
-			}
-#else
 			case 'M': {
 				PENDING_PACKET	**tail;
 				TRANS_BUFFER	*buf;
@@ -5887,101 +5735,11 @@ static void scan_line( char *buf ) {
 				buf->state = ( buf->state == TBS_EMPTY )? TBS_LOAD: TBS_RELOAD;
 				break;
 			}
-#endif
 
 			//
 			//	Accessory Commands
 			//	------------------
 			//
-#ifdef DCC_PLUS_PLUS_COMPATIBILITY
-			case 'a': {
-				PENDING_PACKET	**tail;
-				TRANS_BUFFER	*buf;
-				int		adrs,
-						subadrs,
-						state,
-						target;
-
-				//
-				//	Modify the state of an accessory.
-				//
-				//	<a ADRS SUBADRS STATE>
-				//
-				//		ADRS:	The primary address of the decoder (0-511)
-				//		SUBADRS:The sub-address of the decoder (0-3)
-				//		STATE:	1=on (set), 0=off (clear)
-				//
-				//	10AAAAAA 1aaa1SSC
-				//
-				if( args != 3 ) {
-					errors.log_error( INVALID_ARGUMENT_COUNT, cmd );
-					break;
-				}
-				//
-				//	Save arguments
-				//
-				adrs = arg[ 0 ];
-				subadrs = arg[ 1 ];
-				state = arg[ 2 ];
-				//
-				//	Verify ranges.
-				//
-				if(( adrs < MIN_ACCESSORY_ADDRESS )||( adrs > MAX_ACCESSORY_ADDRESS )) {
-					errors.log_error( INVALID_ADDRESS, adrs );
-					break;
-				}
-				if(( subadrs < MIN_ACCESSORY_SUBADRS )||( subadrs > MAX_ACCESSORY_SUBADRS )) {
-					errors.log_error( INVALID_ADDRESS, subadrs );
-					break;
-				}
-				if(( state != ACCESSORY_ON )&&( state != ACCESSORY_OFF )) {
-					errors.log_error( INVALID_STATE, state );
-					break;
-				}
-				//
-				//	Generate internal target ID.  We negate it here as
-				//	we use negative numbers to distinguish accessory targets
-				//	from mobile decoder targets.
-				//
-				target = -external_acc_target( adrs, subadrs );
-				//
-				//	Find a destination buffer
-				//
-				if(( buf = find_available_buffer( ACCESSORY_BASE_BUFFER, ACCESSORY_TRANS_BUFFERS, target )) == NULL ) {
-					//
-					//	No available buffers
-					//
-					errors.log_error( TRANSMISSION_BUSY, cmd );
-					break;
-				}
-				buf->pending = release_pending_recs( buf->pending, false );
-				tail = &( buf->pending );
-				//
-				//	Now create and append the command to the pending list.
-				//
-				if( !create_pending_rec( &tail, target, TRANSIENT_COMMAND_REPEATS, DCC_SHORT_PREAMBLE, 1, compose_accessory_change( command, adrs, subadrs, state ), command )) {
-					//
-					//	Report that no pending has been record created.
-					//
-					errors.log_error( COMMAND_QUEUE_FAILED, cmd );
-					break;
-				}
-
-#ifdef LCD_DISPLAY_ENABLE
-				//
-				//	Complete LCD summary.
-				//
-				lcd_summary_accessory( buf->display, adrs, subadrs, state );
-#endif
-
-				//
-				//	No reply required.
-				//
-				buf->reply = NO_REPLY_REQUIRED;
-				buf->state = ( buf->state == TBS_EMPTY )? TBS_LOAD: TBS_RELOAD;
-				break;
-			}
-#else
 			case 'A': {
 				PENDING_PACKET	**tail;
 				TRANS_BUFFER	*buf;
@@ -6066,137 +5824,17 @@ static void scan_line( char *buf ) {
 				buf->state = ( buf->state == TBS_EMPTY )? TBS_LOAD: TBS_RELOAD;
 				break;
 			}
-#endif
 
 			//
 			//	Mobile decoder functions
 			//	------------------------
 			//
-#ifdef DCC_PLUS_PLUS_COMPATIBILITY
-			case 'f': {
-				PENDING_PACKET	**tail;
-				TRANS_BUFFER	*buf;
-				int		target,
-						byte1,
-						byte2,
-						len;
-
-				//
-				//	Activate/Deactivate functions within a mobile decoder.
-				//
-				//		<f ADRS BYTE1 [BYTE2]>
-				//
-				//		ADRS:  the short (1-127) or long (128-10239) address of the engine decoder
-				//
-				//		BYTE1:	Mandatory initial data byte
-				//
-				//		BYTE2:	Optional second data byte
-				//
-				//	[0AAAAAAA|11AAAAAA AAAAAAAA] {BYTE1} [ {BYTE2} ]
-				//
-				if(( args != 2 )&&( args != 3 )) {
-					errors.log_error( INVALID_ARGUMENT_COUNT, cmd );
-					break;
-				}
-				//
-				//	Gather parameters
-				//
-				target = arg[ 0 ];
-				byte1 = arg[ 1 ];
-				byte2 = ( args == 3 )? arg[ 2 ]: 0;
-				//
-				//	Validate ranges
-				//
-				if(( target < MINIMUM_DCC_ADDRESS )||( target > MAXIMUM_DCC_ADDRESS )) {
-					errors.log_error( INVALID_ADDRESS, target );
-					break;
-				}
-				//
-				//	To sanity check the byte values provided we only need to ensure
-				//	that byte 1 is one of a set of formats:
-				//
-				//	Only validate as one of (checked off in this order):
-				//
-				//		11011110 
-				//		11011111
-				//		1011????
-				//		1010????
-				//		100?????
-				//
-				if( byte1 != 0b11011110 ) {
-					if( byte1 != 0b11011111 ) {
-						if(( byte1 & 0b11110000 ) != 0b10110000 ) {
-							if(( byte1 & 0b11110000 ) != 0b10100000 ) {
-								if(( byte1 & 0b11100000 ) != 0b10000000 ) {
-									errors.log_error( INVALID_FUNC_NUMBER, cmd );
-									break;
-								}
-							}
-						}
-					}
-				}
-				//
-				//	Find a destination buffer
-				//
-				if(( buf = find_available_buffer( ACCESSORY_BASE_BUFFER, ACCESSORY_TRANS_BUFFERS, arg[ 0 ])) == NULL ) {
-					//
-					//	No available buffers
-					//
-					errors.log_error( TRANSMISSION_BUSY, cmd );
-					break;
-				}
-				buf->pending = release_pending_recs( buf->pending, false );
-				tail = &( buf->pending );
-				//
-				//	Build up the packet now the data is validated.
-				//
-				if( target > MAXIMUM_SHORT_ADDRESS ) {
-					command[ 0 ] = 0b11000000 | ( target >> 8 );
-					command[ 1 ] = target & 0b11111111;
-					len = 2;
-				}
-				else {
-					command[ 0 ] = target;
-					len = 1;
-				}
-				//
-				//	Fill in the payload of the DCC packet.
-				//
-				command[ len++ ] = byte1;
-				if( args == 3 ) command[ len++ ] = byte2;
-				//
-				//	Now append this command to the pending list.
-				//
-				if( !create_pending_rec( &tail, target, TRANSIENT_COMMAND_REPEATS, DCC_SHORT_PREAMBLE, 1, len, command )) {
-					//
-					//	Report that no pending has been record created.
-					//
-					errors.log_error( COMMAND_QUEUE_FAILED, cmd );
-					break;
-				}
-				
-#ifdef LCD_DISPLAY_ENABLE
-				//
-				//	Reduced LCD summary as we have no idea what has been modified.
-				//
-				lcd_summary_function( buf->display, target );
-#endif
-
-				//
-				//	There is no future reply so set the state.
-				//
-				buf->reply = NO_REPLY_REQUIRED;
-				buf->state = ( buf->state == TBS_EMPTY )? TBS_LOAD: TBS_RELOAD;
-				break;
-			}
-#else
 			case 'F': {
 				PENDING_PACKET	**tail;
 				TRANS_BUFFER	*buf;
 				int		target,
 						func,
 						state;
-				bool		ok;
 
 				//
 				//	Mobile decoder set function state
@@ -6251,6 +5889,8 @@ static void scan_line( char *buf ) {
 				buf->pending = release_pending_recs( buf->pending, false );
 				tail = &( buf->pending );
 				if( state == FUNCTION_TOGGLE ) {
+					bool		ok;
+					
 					//
 					//	Create a pair of DCC commands to turn the function
 					//	on then off:- the toggle option.
@@ -6298,16 +5938,160 @@ static void scan_line( char *buf ) {
 				buf->state = ( buf->state == TBS_EMPTY )? TBS_LOAD: TBS_RELOAD;
 				break;
 			}
+
+			//	Write Mobile State (Operations Track)
+			//	-------------------------------------
+			//
+			//	Overwrite the entire "state" of a specific mobile decoder
+			//	with the information provided in the arguments.
+			//
+			//	While this is provided as a single DCC Generator command
+			//	there is no single DCC command which implements this functionality
+			//	so consequently the command has to be implemented as a tightly
+			//	coupled sequence of commands.  This being said, thhe implementation
+			//	of the commannd should ensure that either *all* of these commands
+			//	are transmitted or *none* of them are.  While this does not
+			//	guarantee that the target decoder gets all of the updates
+			//	it does increase the likelihood that an incomplete update is
+			//	successful.
+			//
+			//	[W ADRS SPEED DIR FNA FNB FNC FND] -> [W ADRS SPEED DIR]
+			//
+			//		ADRS:	The short (1-127) or long (128-10239) address of the engine decoder
+			//		SPEED:	Throttle speed from 0-126, or -1 for emergency stop
+			//		DIR:	1=Forward, 0=Reverse
+			//		FNA:	Bit mask (in decimal) for Functions 0 through 7
+			//		FNB:	... Functions 8 through 15
+			//		FNC:	... Functions 16 through 23
+			//		FND:	... Functions 24 through 28 (bit positions for 29 through 31 ignored)
+			//
+			case 'W': {
+				//
+				//	Define how many function bit block there will be.
+				//
+				const int bit_blocks = 4;
+				
+				PENDING_PACKET	**tail;
+				TRANS_BUFFER	*buf;
+				int		target,
+						speed,
+						dir,
+						fn[ bit_blocks ],
+						i;
+				byte		l;
+						
+				//
+				//	Verify we have all the arguments required.
+				//
+				if( args != ( 3 + bit_blocks )) {
+					errors.log_error( INVALID_ARGUMENT_COUNT, cmd );
+					break;
+				}
+				//
+				//	Save command arguments.
+				//
+				target = arg[ 0 ];
+				speed = arg[ 1 ];
+				dir = arg[ 2 ];
+				for( i = 0; i < bit_blocks; i++ ) fn[ i ] = arg[ 3 + i ];
+				
+				//
+				//	Verify ranges
+				//
+				if(( target < MINIMUM_DCC_ADDRESS )||( target > MAXIMUM_DCC_ADDRESS )) {
+					errors.log_error( INVALID_ADDRESS, target );
+					break;
+				}
+				if(( speed < MINIMUM_DCC_SPEED )||( speed > MAXIMUM_DCC_SPEED )) {
+					errors.log_error( INVALID_SPEED, speed );
+					break;
+				}
+				if(( dir != DCC_FORWARDS )&&( dir != DCC_BACKWARDS )) {
+					errors.log_error( INVALID_DIRECTION, dir );
+					break;
+				}
+				for( i = 0; i < bit_blocks; i++ ) {
+					if(( fn[ i ] < 0 )||( fn[ i ] > 255 )) {
+						errors.log_error( INVALID_BIT_MASK, fn[ i ]);
+						break;
+					}
+				}
+				if( i < bit_blocks ) break; // needed to cascade the above break out of the switch statement.
+				
+				//
+				//	Find a destination buffer
+				//
+				if(( buf = find_available_buffer( MOBILE_BASE_BUFFER, MOBILE_TRANS_BUFFERS, target )) == NULL ) {
+					//
+					//	No available buffers
+					//
+					errors.log_error( TRANSMISSION_BUSY, cmd );
+					break;
+				}
+				//
+				//	Clear any pending commands.
+				//
+				buf->pending = release_pending_recs( buf->pending, false );
+				tail = &( buf->pending );
+				//
+				//	create the function setting commands through repeatedly calling
+				//	the compose_function_block() function.
+				//
+				i = 0;	// this is the state variable required by compose_function_block()
+				//
+				//	Create a DCC command, and if it is more than 0 bytes long
+				//	add it to the pending set of commands and go round again.
+				//
+				while(( l = compose_function_block( command, &i, target, fn, bit_blocks ))) {
+					//
+					//	... made one, so append it ...
+					//
+					if( !create_pending_rec( &tail, target, TRANSIENT_COMMAND_REPEATS, DCC_SHORT_PREAMBLE, 1, l, command )) {
+						//
+						//	Report that no pending record has been created.
+						//
+						buf->pending = release_pending_recs( buf->pending, false );
+						errors.log_error( COMMAND_QUEUE_FAILED, cmd );
+						break;
+					}
+				}
+				if( l ) break; // needed to cascade the above break out of the while loop.
+				
+				//
+				//	Now create and append the motion command to the pending list.
+				//
+				if( !create_pending_rec( &tail, target, (( speed == MINIMUM_DCC_SPEED )? TRANSIENT_COMMAND_REPEATS: 0 ), DCC_SHORT_PREAMBLE, 1, compose_motion_packet( command, target, speed, dir ), command )) {
+					//
+					//	Report that no pending record has been created.
+					//
+					buf->pending = release_pending_recs( buf->pending, false );
+					errors.log_error( COMMAND_QUEUE_FAILED, cmd );
+					break;
+				}
+
+#ifdef LCD_DISPLAY_ENABLE
+				//
+				//	Complete LCD summary.
+				//
+				lcd_summary_motion( buf->display, target, speed, dir );
 #endif
+
+				//
+				//	Construct the reply to send when we get send
+				//	confirmation and pass to the manager code to
+				//	insert the new packet into the transmission
+				//	process.
+				//
+				reply_3( buf->contains, 'W', target, speed, dir );
+				buf->reply = REPLY_ON_SEND;
+				buf->state = ( buf->state == TBS_EMPTY )? TBS_LOAD: TBS_RELOAD;
+				break;
+			}
+
 			//
 			//	Modify CV values on the programming track
 			//	-----------------------------------------
 			//
-#ifdef DCC_PLUS_PLUS_COMPATIBILITY
-				//
-				//	No compatibility command defined.
-				//
-#else
 			case 'S': {
 #ifdef PROGRAMMING_TRACK
 				PENDING_PACKET	**tail;
@@ -6386,8 +6170,7 @@ static void scan_line( char *buf ) {
 				//	of the reply routine.
 				//
 				reply_2c( buf->contains, 'S', cv, value );
-				confirmation_enabled = true;
-				load_confirmed = false;
+				reset_confirmation( false );
 				buf->reply = REPLY_ON_CONFIRM;
 				buf->state = ( buf->state == TBS_EMPTY )? TBS_LOAD: TBS_RELOAD;
 #else
@@ -6395,16 +6178,11 @@ static void scan_line( char *buf ) {
 #endif
 				break;
 			}
-#endif
+
 			//
 			//	Verify CV Value
 			//	---------------
 			//
-#ifdef DCC_PLUS_PLUS_COMPATIBILITY
-				//
-				//	No compatibility command defined.
-				//
-#else
 			case 'V': {
 #ifdef PROGRAMMING_TRACK
 				PENDING_PACKET	**tail;
@@ -6483,8 +6261,7 @@ static void scan_line( char *buf ) {
 				//	will be replaced by a 1 or 0 to reflect confirmation.
 				//
 				reply_2c( buf->contains, 'V', cv, value );
-				confirmation_enabled = true;
-				load_confirmed = false;
+				reset_confirmation( false );
 				buf->reply = REPLY_ON_CONFIRM;
 				buf->state = ( buf->state == TBS_EMPTY )? TBS_LOAD: TBS_RELOAD;
 #else
@@ -6492,16 +6269,11 @@ static void scan_line( char *buf ) {
 #endif
 				break;
 			}
-#endif
+
 			//
 			//	Set (Update) CV bit value
 			//	-------------------------
 			//
-#ifdef DCC_PLUS_PLUS_COMPATIBILITY
-				//
-				//	No compatibility command defined.
-				//
-#else
 			case 'U': {
 #ifdef PROGRAMMING_TRACK
 				PENDING_PACKET	**tail;
@@ -6589,8 +6361,7 @@ static void scan_line( char *buf ) {
 				//	will be replaced by a 1 or 0 to reflect confirmation.
 				//
 				reply_3c( buf->contains, 'U', cv, bnum, value );
-				confirmation_enabled = true;
-				load_confirmed = false;
+				reset_confirmation( false );
 				buf->reply = REPLY_ON_CONFIRM;
 				buf->state = ( buf->state == TBS_EMPTY )? TBS_LOAD: TBS_RELOAD;
 #else
@@ -6598,16 +6369,11 @@ static void scan_line( char *buf ) {
 #endif
 				break;
 			}
-#endif
+
 			//
 			//	Read CV bit value
 			//	-----------------
 			//
-#ifdef DCC_PLUS_PLUS_COMPATIBILITY
-				//
-				//	No compatibility command defined.
-				//
-#else
 			case 'R': {
 #ifdef PROGRAMMING_TRACK
 				PENDING_PACKET	**tail;
@@ -6698,8 +6464,7 @@ static void scan_line( char *buf ) {
 				//	will be replaced by a 1 or 0 to reflect confirmation.
 				//
 				reply_3c( buf->contains, 'R', cv, bnum, value );
-				confirmation_enabled = true;
-				load_confirmed = false;
+				reset_confirmation( false );
 				buf->reply = REPLY_ON_CONFIRM;
 				buf->state = ( buf->state == TBS_EMPTY )? TBS_LOAD: TBS_RELOAD;
 #else
@@ -6707,7 +6472,7 @@ static void scan_line( char *buf ) {
 #endif
 				break;
 			}
-#endif
+
 			//
 			//	EEPROM configurable constants
 			//
@@ -6901,11 +6666,10 @@ static void process_input( byte count ) {
 //
 
 //
-//	Define a the periodic variable that is used to initiate
-//	activities at durations greater than microseconds or
-//	milliseconds.
+//	'dynamic_loading' is used to control the periodic output
+//	of district loads asynchronously from the DCC Generator.
 //
-static unsigned long periodic = 0;
+static unsigned long dynamic_loading = 0;
 
 //
 //	Finally, the main event loop:
@@ -6948,22 +6712,16 @@ void loop( void ) {
 		//	
 		monitor_current_load( track_load_reading );
 	}
-	//
-	//	Time for periodic activities?
-	//
-	if( now > periodic ) {
-		//
-		//	Yes, but before getting on with them, set the
-		//	next periodic time.
-		//
-		periodic = now + PERIODIC_INTERVAL;
 
-#ifndef DCC_PLUS_PLUS_COMPATIBILITY
+	//
+	//	Dynamic load reporting?
+	//
+	if(( DYNAMIC_LOAD_UPDATES )&&( now > dynamic_loading )) {
 		//
 		//	Forward out an asynchronous power update.
 		//
+		dynamic_loading = now + DYNAMIC_LOAD_UPDATES;
 		report_track_power();
-#endif
 	}
 
 #ifdef LCD_DISPLAY_ENABLE
@@ -6972,7 +6730,6 @@ void loop( void ) {
 	//
 	display_lcd_updates();
 #endif
-
 
 	//
 	//	Then we give the Error management system an

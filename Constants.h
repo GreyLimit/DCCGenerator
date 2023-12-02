@@ -30,6 +30,7 @@
 #define _CONSTANTS_H_
 
 #include "Environment.h"
+#include "Magic.h"
 
 //
 //	The constants will be managed through a two tier system of
@@ -37,24 +38,27 @@
 //	structure containing constant values (held in the variable
 //	space).
 //
-//	define the number of "int" constants we have to manage:
+//	Define the number of "int" constants we have to manage:
 //
-#define CONSTANTS	12
+#define CONSTANTS	15
 
 //
 //	The following structure is the variable space definition
 //	from which constant values are extracted at execution time.
 //
 typedef struct {
-	word	instant_current_limit,
+	word	identification_magic,
+		instant_current_limit,
 		average_current_limmit,	
 		power_grace_period,
 		periodic_interval,
 		lcd_update_interval,
 		line_refresh_interval,
 		driver_reset_period,
-		driver_phase_period;
-	byte	minimum_delta_amps,
+		driver_phase_period,
+		dynamic_load_updates;
+	byte	confirmation_ratio,
+		compound_index,
 		transient_command_repeats,
 		service_mode_reset_repeats,
 		service_mode_command_repeats;
@@ -88,6 +92,18 @@ extern Constants constant;
 //
 
 //
+//	Define the "Magic" number which provides a secondary
+//	verification that the content of the constants is
+//	suitable for the operation of the firmware.
+//
+//	The default value is "built" using the MAGIC() macro
+//	defined in "Magic.h".
+//
+#define DEFAULT_IDENTIFICATION_MAGIC	MAGIC(2023,8,18)
+#define IDENTIFICATION_MAGIC_VAR	constant.var.value.identification_magic
+#define IDENTIFICATION_MAGIC		IDENTIFICATION_MAGIC_VAR
+
+//
 //	Define the absolute current limit value (0-1023) at which
 //	the power is removed from the track (current spike).
 //
@@ -112,19 +128,26 @@ extern Constants constant;
 #define POWER_GRACE_PERIOD		POWER_GRACE_PERIOD_VAR
 
 //
-//	Define the minimum number of positive delta amps required for the
-//	code to recognised a confirmation signal.
+//	The "confirmation ratio" is the ratio of "confirmation readings
+//	identified" (C) during a programming enquiry command divided into
+//	the total number of reading taken during the execution of the
+//	command (T).
 //
-//	Pre-November 2022: MINIMUM_DELTA_AMPS=35
-//	Post-November 2022: MINIMUM_DELTA_AMPS=18
+//	If the result of T/C is less than the CONFIRMATION_RATIO then
+//	the confirmation is accepted.
 //
-//	Note that this value, set while the firmware was in version 1.2
-//	may now be too low as version 1.3 maintains a proper delay period
-//	during which time the power levels are monitored.
+#define DEFAULT_CONFIRMATION_RATIO	10
+#define CONFIRMATION_RATIO_VAR		constant.var.value.confirmation_ratio
+#define CONFIRMATION_RATIO		CONFIRMATION_RATIO_VAR
+
 //
-#define DEFAULT_MINIMUM_DELTA_AMPS	18
-#define MINIMUM_DELTA_AMPS_VAR		constant.var.value.minimum_delta_amps
-#define MINIMUM_DELTA_AMPS		MINIMUM_DELTA_AMPS_VAR
+//	The "compound index" is the index into the averaging compound array
+//	used by the code identifying the presence (or otherwise) of a
+//	confirmation signal from a decoder being programmed.
+//
+#define DEFAULT_COMPOUND_INDEX		6
+#define COMPOUND_INDEX_VAR		constant.var.value.compound_index
+#define COMPOUND_INDEX			COMPOUND_INDEX_VAR
 
 //
 //	Define the periodic interval in milliseconds.
@@ -202,6 +225,16 @@ extern Constants constant;
 #define SERVICE_MODE_COMMAND_REPEATS_VAR	constant.var.value.service_mode_command_repeats
 #define SERVICE_MODE_COMMAND_REPEATS		SERVICE_MODE_COMMAND_REPEATS_VAR
 
+//
+//	Dynamic Load Updates specifies the frequency of
+//	asynchronous load updates the Arduino Generator
+//	sends to the host system (the '[L#]' replies).
+//
+//	A zero value turns off the updates.
+//
+#define DEFAULT_DYNAMIC_LOAD_UPDATES		1000
+#define DYNAMIC_LOAD_UPDATES_VAR		constant.var.value.dynamic_load_updates
+#define DYNAMIC_LOAD_UPDATES			DYNAMIC_LOAD_UPDATES_VAR
 
 //
 //	Define the number of "1"s transmitted by the firmware

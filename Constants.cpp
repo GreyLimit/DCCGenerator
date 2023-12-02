@@ -47,17 +47,20 @@ typedef struct {
 } ConstantValue;
 
 //
-//	Constant names kept in program mmemory.
+//	Constant names kept in program memory.
 //
+static const char string_im[] PROGMEM = "identification_magic";
 static const char string_icl[] PROGMEM = "instant_current_limit";
 static const char string_acl[] PROGMEM = "average_current_limit";
 static const char string_pgp[] PROGMEM = "power_grace_period";
-static const char string_mda[] PROGMEM = "minimum_delta_amps";
+static const char string_cr[] PROGMEM = "confirmation_ratio";
+static const char string_ci[] PROGMEM = "compound_index";
 static const char string_pi[] PROGMEM = "periodic_interval";
 static const char string_lui[] PROGMEM = "lcd_update_interval";
 static const char string_lri[] PROGMEM = "line_refresh_interval";
 static const char string_drp[] PROGMEM = "driver_reset_period";
 static const char string_dpp[] PROGMEM = "driver_phase_period";
+static const char string_dlu[] PROGMEM = "dynamic_load_updates";
 static const char string_tcr[] PROGMEM = "transient_command_repeats";
 static const char string_smrr[] PROGMEM = "service_mode_reset_repeats";
 static const char string_smcr[] PROGMEM = "service_mode_command_repeats";
@@ -66,15 +69,21 @@ static const char string_smcr[] PROGMEM = "service_mode_command_repeats";
 //	This is the static table of constants support information.
 //
 static const ConstantValue constant_value[ CONSTANTS ] PROGMEM = {
+// 0
+	{ string_im,	DEFAULT_IDENTIFICATION_MAGIC,		&IDENTIFICATION_MAGIC_VAR,		NULL					},
 	{ string_icl,	DEFAULT_INSTANT_CURRENT_LIMIT,		&INSTANT_CURRENT_LIMIT_VAR,		NULL					},
 	{ string_acl,	DEFAULT_AVERAGE_CURRENT_LIMIT,		&AVERAGE_CURRENT_LIMIT_VAR,		NULL					},
 	{ string_pgp,	DEFAULT_POWER_GRACE_PERIOD,		&POWER_GRACE_PERIOD_VAR,		NULL					},
-	{ string_mda,	DEFAULT_MINIMUM_DELTA_AMPS,		NULL,					&MINIMUM_DELTA_AMPS_VAR			},
+	{ string_cr,	DEFAULT_CONFIRMATION_RATIO,		NULL,					&CONFIRMATION_RATIO_VAR			},
+// 5
+	{ string_ci,	DEFAULT_COMPOUND_INDEX,			NULL,					&COMPOUND_INDEX_VAR			},
 	{ string_pi,	DEFAULT_PERIODIC_INTERVAL,		&PERIODIC_INTERVAL_VAR,			NULL					},
 	{ string_lui,	DEFAULT_LCD_UPDATE_INTERVAL,		&LCD_UPDATE_INTERVAL_VAR,		NULL					},
 	{ string_lri,	DEFAULT_LINE_REFRESH_INTERVAL,		&LINE_REFRESH_INTERVAL_VAR,		NULL					},
 	{ string_drp,	DEFAULT_DRIVER_RESET_PERIOD,		&DRIVER_RESET_PERIOD_VAR,		NULL					},
+// 10
 	{ string_dpp,	DEFAULT_DRIVER_PHASE_PERIOD,		&DRIVER_PHASE_PERIOD_VAR,		NULL					},
+	{ string_dlu,	DEFAULT_DYNAMIC_LOAD_UPDATES,		&DYNAMIC_LOAD_UPDATES_VAR,		NULL					},
 	{ string_tcr,	DEFAULT_TRANSIENT_COMMAND_REPEATS,	NULL,					&TRANSIENT_COMMAND_REPEATS_VAR		},
 	{ string_smrr,	DEFAULT_SERVICE_MODE_RESET_REPEATS,	NULL,					&SERVICE_MODE_RESET_REPEATS_VAR		},
 	{ string_smcr,	DEFAULT_SERVICE_MODE_COMMAND_REPEATS,	NULL,					&SERVICE_MODE_COMMAND_REPEATS_VAR	}
@@ -150,7 +159,7 @@ void initialise_constants( void ) {
 	//	Verify memory read is acceptable and
 	//	reset all if not valid.
 	//
-	if( constant.var.check.sum != checksum_consts()) reset_constants();
+	if(( constant.var.check.sum != checksum_consts())||( IDENTIFICATION_MAGIC != DEFAULT_IDENTIFICATION_MAGIC )) reset_constants();
 }
 
 //
