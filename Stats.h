@@ -59,6 +59,7 @@ private:
 	//
 	Average< STATS_AVERAGE_READINGS, byte >	_packets_sent;
 	Average< STATS_AVERAGE_READINGS, byte >	_free_buffers;
+	Average< STATS_AVERAGE_READINGS, word > _idle_cycles;
 
 	//
 	//	The control signal used to schedule this object.
@@ -101,6 +102,10 @@ public:
 	word interrupts_caught( void );
 #endif
 
+	//
+	//	Report the average idle slots the CPU sees.
+	//
+	word idle_cycles( void );
 
 };
 

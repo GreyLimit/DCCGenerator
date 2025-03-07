@@ -24,7 +24,6 @@
 #include "Parameters.h"
 #include "Configuration.h"
 #include "Library_Types.h"
-#include "Trace.h"
 
 //
 //	Make an estimation of the heap size based on the hardware and
@@ -60,47 +59,48 @@ protected:
 
 public:
 	//
-	//	This is the API call that the recovery provider must
-	//	provide an implementation for.  Return true if *some*
-	//	memory has been released.
+	//	The memory reclamation API.
+	//	---------------------------
 	//
-	virtual bool release_memory( void ) = 0;
+	//	These are a set of calls which, when supported by a class,
+	//	allow the Heap system to claw back saved memory blocks
+	//	using a controlled mechanism (as opposed to just telling
+	//	all classes to return everything).
+	//
+
+	//
+	//	Return the number of bytes memory being "cached" and
+	//	available for release if required.  This is a statistical
+	//	call to allow tracking of memory usage.
+	//
+	virtual size_t cache_memory( void ) = 0;
+
+	//
+	//	Tell the object to clear all cached memory and release it
+	//	to the heap.
+	//
+	virtual bool clear_cache( void ) = 0;
+
+	//
+	//	Ask the object how much memory, as a single block, it
+	//	would release to satisfy a specified allocation request.
+	//	Return 0 if this object cannot satisfy the request.
+	//
+	virtual size_t test_cache( size_t bytes ) = 0;
+
+	//
+	//	Request that an object release, as a single block,
+	//	enough memory to cover the specified allocation.
+	//	Return true on success, false on failure.
+	//
+	virtual bool release_cache( size_t bytes ) = 0;
 	
 	//
 	//	These routines provide the API for the Memory Heap code
-	//	to manage the list and request a memory recovery run.
+	//	to manage the object list.
 	//
-	Memory_Recovery *linkup( Memory_Recovery *list ) {
-
-		STACK_TRACE( "Memory_Recovery *Memory_Heap::linkup( Memory_Recovery *list )" );
-
-		//
-		//	Just insert ourselves into the front of the
-		//	list and return our own address.
-		//
-		_next = list;
-		return( this );
-	}
-	bool request_recovery( void ) {
-
-		STACK_TRACE( "void Memory_Heap::request_recovery( void )" );
-
-		bool	r = false;
-
-		//
-		//	Watch this routine as it might be called with
-		//	this == NIL( Memory_Recovery ).
-		//
-		//	This routine *could* do this recursively, but
-		//	for speed and the smallest possible stack impact
-		//	the routine runs down the list directly (hence
-		//	the variable being protected rather than private).
-		//
-		for( Memory_Recovery *p = this; p != NIL( Memory_Recovery ); p = p->_next ) {
-			r |= p->release_memory();
-		}
-		return( r );
-	}
+	Memory_Recovery *linkup( Memory_Recovery *list );
+	Memory_Recovery *next( void );
 };
 
 //
@@ -254,7 +254,7 @@ public:
 	//	Return the amount of free space in the heap, though not
 	//	necessarily the largest free space.
 	//
-	storage_unit free_memory( void );
+	size_t free_memory( void );
 	
 	//
 	//	Return the largest memory block available.  This might be
@@ -264,7 +264,13 @@ public:
 	//	This routine will be slow, so do not include in any time
 	//	critical activity or use with any real frequency.
 	//
-	storage_unit free_block( void );
+	size_t free_block( void );
+
+	//
+	//	Calculate the amount of memory being held "in cache" by
+	//	objects in the system.
+	//
+	size_t cache_memory( void );
 
 	//
 	//	Classes which are prepared to respond to the memory

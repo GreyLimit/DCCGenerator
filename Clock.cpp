@@ -61,10 +61,6 @@ Clock::Clock( void ) {
 	//
 	_active = NIL( clock_event );
 	_free = NIL( clock_event );
-	for( byte i = 0; i < clock_events; i++ ) {
-		_events[ i ].next = (clock_event *)_free;
-		_free = &( _events[ i ]);
-	}
 }
 
 void Clock::initialise( void ) {
@@ -156,13 +152,16 @@ bool Clock::delay_event( word ticks, Signal *gate, bool repeating ) {
 	//
 	//	Find an empty record or return false.
 	//
-	if(( ptr = (clock_event *)_free ) == NIL( clock_event )) return( false );
+	if(( ptr = (clock_event *)_free )) {
+		//
+		//	Unlink free record...
+		//
+		_free = ptr->next;
+	}
+	else {
+		if(!( ptr = new clock_event )) return( false );
+	}
 
-	//
-	//	Unlink free record...
-	//
-	_free = ptr->next;
-	
 	//
 	//	...and fill it in.
 	//
@@ -368,7 +367,83 @@ void Clock::process( UNUSED( byte handle )) {
 	TRACE_CLOCK( console.println( F( "CLK Done" )));
 }
 
+//
+//	The memory reclamation API.
+//	---------------------------
+//
+//	These are a set of calls which, when supported by a class,
+//	allow the Heap system to claw back saved memory blocks
+//	using a controlled mechanism (as opposed to just telling
+//	all classes to return everything).
+//
 
+//
+//	Return the number of bytes memory being "cached" and
+//	available for release if required.  This is a statistical
+//	call to allow tracking of memory usage.
+//
+size_t Clock::cache_memory( void ) {
+
+	STACK_TRACE( "size_t Clock::cache_memory( void )" );
+
+	word total = 0;
+	for( clock_event *look = _free; look != NIL( clock_event ); look = look->next ) total += sizeof( clock_event );
+	return( total );
+}
+
+//
+//	Tell the object to clear all cached memory and release it
+//	to the heap.
+//
+bool Clock::clear_cache( void ) {
+
+	STACK_TRACE( "bool Clock::clear_cache( void )" );
+
+	clock_event	*ptr;
+	bool		r;
+
+	r = false;
+	while(( ptr = _free )) {
+		_free = ptr;
+		delete ptr;
+		r = true;
+	}
+	return( r );
+}
+
+//
+//	Ask the object how much memory, as a single block, it
+//	would release to satisfy a specified allocation request.
+//	Return 0 if this object cannot satisfy the request.
+//
+size_t Clock::test_cache( size_t bytes ) {
+	
+	STACK_TRACE( "size_t Clock::test_cache( size_t bytes )" );
+
+	if( _free &&( sizeof( clock_event ) >= bytes )) return( sizeof( clock_event ));
+	return( 0 );
+}
+
+//
+//	Request that an object release, as a single block,
+//	enough memory to cover the specified allocation.
+//	Return true on success, false on failure.
+//
+bool Clock::release_cache( size_t bytes ) {
+	
+	STACK_TRACE( "bool Clock::release_cache( size_t bytes )" );
+
+	if( _free &&( sizeof( clock_event ) >= bytes )) {
+		clock_event *ptr;
+
+		ptr = _free;
+		_free = ptr->next;
+		delete ptr;
+
+		return( true );
+	}
+	return( false );
+}
 
 //
 //	The actual clock instance.

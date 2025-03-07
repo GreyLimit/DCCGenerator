@@ -23,14 +23,7 @@
 #include "Configuration.h"
 #include "Task_Entry.h"
 #include "Signal.h"
-
-//
-//	Define (if not already defined) the maximum number of clock
-//	events which the system will handle.
-//
-#ifndef CLOCK_EVENTS
-#define CLOCK_EVENTS	12
-#endif
+#include "Memory_Heap.h"
 
 //
 //	Define our base clock tick dependent on the underlying hardware.
@@ -104,7 +97,7 @@
 //	based activities which are paced through time in a controlled
 //	fashion.
 //
-class Clock : public Task_Entry {
+class Clock : public Task_Entry, Memory_Recovery {
 public:
 	//
 	//	Timing the Clock
@@ -359,11 +352,6 @@ public:
 
 private:
 	//
-	//	How many events are we prepared to work with?
-	//
-	static const byte	clock_events = CLOCK_EVENTS;
-	
-	//
 	//	Our task managing structure.
 	//
 	struct clock_event {
@@ -377,15 +365,14 @@ private:
 	//	Our task managing pointers and the array of records
 	//	which we have to manage.
 	//
-	volatile clock_event	*_active,
-				*_free;
-	clock_event		_events[ clock_events ];
-	
+	clock_event	*_active,
+			*_free;
+
 	//
 	//	Declare the Signal used as a link between the interrupt
 	//	and the routine schedulling the work.
 	//
-	Signal			_irq;
+	Signal		_irq;
 
 	//
 	//	Insert an event into the active list according to the
@@ -469,6 +456,38 @@ public:
 	//
 	virtual void process( byte handle );
 
+	//
+	//	The memory reclamation API.
+	//	---------------------------
+	//
+
+	//
+	//	Return the number of bytes memory being "cached" and
+	//	available for release if required.  This is a statistical
+	//	call to allow tracking of memory usage.
+	//
+	virtual size_t cache_memory( void );
+
+	//
+	//	Tell the object to clear all cached memory and release it
+	//	to the heap.
+	//
+	virtual bool clear_cache( void );
+
+	//
+	//	Ask the object how much memory, as a single block, it
+	//	would release to satisfy a specified allocation request.
+	//	Return 0 if this object cannot satisfy the request.
+	//
+	virtual size_t test_cache( size_t bytes );
+
+	//
+	//	Request that an object release, as a single block,
+	//	enough memory to cover the specified allocation.
+	//	Return true on success, false on failure.
+	//
+	virtual bool release_cache( size_t bytes );
+	
 };
 
 

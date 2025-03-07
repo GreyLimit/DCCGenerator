@@ -69,11 +69,18 @@ public:
 	}
 	
 	//
-	//	return the last value in the average chain without
+	//	Return the last value in the average chain without
 	//	needing to know how many values there are.
 	//
 	data last( void ) {
 		return( _value[ average_span-1 ]);
+	}
+	
+	//
+	//	Return the first value in the average chain.
+	//
+	data first( void ) {
+		return( _value[ 0 ]);
 	}
 };
 

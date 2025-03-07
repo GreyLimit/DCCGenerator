@@ -12,259 +12,162 @@
 #include "Environment.h"
 #include "Parameters.h"
 #include "Configuration.h"
+#include "Code_Assurance.h"
 #include "Critical.h"
 #include "Signal.h"
+#include "Task_Entry.h"
+#include "Task.h"
+#include "Errors.h"
 
 //
-//	We need the API for the base.
+//	Dymanic queue needs the memory heap.
+//
+#include "Memory_Heap.h"
+
+//
+//	This is the generic API these are based on.
 //
 #include "Byte_Queue_API.h"
 
 
 //
-//	Define a template class where the argument passed in is
-//	the size of the buffer area.
+//	Define a class to implement a "stretchy" dynamically allocated
+//	byte queue.
 //
-//	We use a template class as the queue sizes are statically
-//	defined at compile time and avoid the requirement for using
-//	heap memory and unnecessary double indirection.
-//
-template< byte QUEUE_SIZE >
-class Byte_Queue : public Byte_Queue_API {
-	private:
-		//
-		//	Declare a constant for the size of the queue area.
-		//
-		static const byte	queue_size = QUEUE_SIZE;
-		
-		//
-		//	Create the memory that is used for the queue area
-		//
-		byte			_queue[ queue_size ];
-		
-		//
-		//	Define where the data in added and removed and
-		//	how many bytes are in the queue.
-		//
-		volatile byte		_in,
-					_out,
-					_content;
-		
-	public:
-		//
-		//	Constructor only.
-		//	
-		Byte_Queue( void ) {
-			//
-			//	Queue indexes and length
-			//
-			_in = 0;
-			_out = 0;
-			_content = 0;
-		}
-		//
-		//	The Byte Queue API
-		//	==================
-		//
-		
-		virtual bool write( byte data ) {
-			Critical	code;
+class Byte_Queue : public Byte_Queue_API, Memory_Recovery, Task_Entry {
+private:
+	//
+	//	Declare a constant for the size of a temporary byte
+	//	buffer which is used by the class when
+	//
+#ifdef DYNAMIC_BLOCK_SIZE
+	static const byte	block_size = DYNAMIC_BLOCK_SIZE;
+#else
+	static const byte	block_size = 8;
+#endif
 
-			//
-			//	Is there space for the additional byte?
-			//
-			if( _content >= queue_size ) return( false );
-			//
-			//	There is sufficient space.
-			//
-			_queue[ _in++ ] = data;
-			if( _in >= queue_size ) _in = 0;
-			_content++;
-			//
-			//	Done.
-			//
-			return( true );
-		}
+	//
+	//	Define the structure used store a section of the
+	//	queue as allocated in the heap.
+	//
+	struct queue_block {
+		byte		queue[ block_size ];
+		queue_block	*next;
+	};
+	
+	//
+	//	Blocks are allocated and managed from here.
+	//
+	//	The system will *always* keep a block in the
+	//	queue and so the _tail pointer will always
+	//	point to a block being filled up, and never
+	//	points to the *address* of the last next field.
+	//
+	volatile queue_block	*_queue,
+				*_tail,
+				*_free;
+	
+	//
+	//	Remember where we are filling in on the tail block
+	//	and picking out on the head block.
+	//
+	volatile byte		_in,
+				_out,
+				_content;
 
-		virtual byte read( void ) {
-			Critical	code;
-			
-			if( _content ) {
-				byte	data;
+	//
+	//	The signal used to facilitate block allocation.
+	//
+	Signal			_flag;
 
-				//
-				//	There is data so get it.
-				//
-				data = _queue[ _out++ ];
-				if( _out >= queue_size ) _out = 0;
-				_content--;
-				//
-				//	Done.
-				//
-				return( data );
-			}
-			return( 0 );
-		}
+	//
+	//	Optional data ready signal.
+	//
+	Signal			*_ready;
 
-		//
-		//	Perform a "reset" of the underlying system.  This
-		//	is used only to recover from an unknown condition
-		//	with the expectation that upon return the queue
-		//	can be reliably used.
-		//
-		virtual void reset( void ) {
-			Critical code;
-			
-			//
-			//	Queue indexes and length
-			//
-			_in = 0;
-			_out = 0;
-			_content = 0;
-		}
+	//
+	//	This is the handle number used for memory allocation.
+	//
+	static const byte	allocate_block = 1;
 
-		virtual byte space( void ) {
-			return( queue_size - _content );
-		}
+public:
+	//
+	//	Constructor only.
+	//	
+	Byte_Queue( void );
 
-		virtual byte available( void ) {
-			return( _content );
-		}
+	//
+	//	This is the initialisation routine that must be called
+	//	before the queue can be used.  The argument can be either
+	//	NIL( Signal ) for no data ready signals or the address
+	//	of a signal to be released on data being ready.
+	//
+	void initialise( Signal *ready );
 
-		virtual byte pending( void ) {
-			return( _content );
-		}
+	//
+	//	This processing routine is called only when there
+	//	has been a request (from inside a Critical code
+	//	section) for an additional queue_block to be allocated.
+	//
+	virtual void process( byte handle );
+	
+	//
+	//	The Byte Queue API
+	//	==================
+	//
+	//	The method for writing to the queue depends to some
+	//	extent if we are already in an ISR or Critical code
+	//	section.
+	//
+	virtual bool write( byte data );
+	virtual byte read( void );
+
+	//
+	//	Perform a "reset" of the underlying system.  This
+	//	is used only to recover from an unknown condition
+	//	with the expectation that upon return the queue
+	//	can be reliably used.
+	//
+	virtual void reset( void );
+	virtual byte space( void );
+	virtual byte available( void );
+	virtual byte pending( void );
+
+	//
+	//	The memory reclamation API.
+	//	---------------------------
+	//
+
+	//
+	//	Return the number of bytes memory being "cached" and
+	//	available for release if required.  This is a statistical
+	//	call to allow tracking of memory usage.
+	//
+	virtual size_t cache_memory( void );
+
+	//
+	//	Tell the object to clear all cached memory and release it
+	//	to the heap.
+	//
+	virtual bool clear_cache( void );
+
+	//
+	//	Ask the object how much memory, as a single block, it
+	//	would release to satisfy a specified allocation request.
+	//	Return 0 if this object cannot satisfy the request.
+	//
+	virtual size_t test_cache( size_t bytes );
+
+	//
+	//	Request that an object release, as a single block,
+	//	enough memory to cover the specified allocation.
+	//	Return true on success, false on failure.
+	//
+	virtual bool release_cache( size_t bytes );
+
 
 };
 
-//
-//	Define a template class similar to the above class but including
-//	the use of a Signal object to control data collection.
-//
-template< byte QUEUE_SIZE >
-class Byte_Queue_Signal : public Byte_Queue_API {
-	private:
-		//
-		//	Declare a constant for the size of the queue area.
-		//
-		static const byte	queue_size = QUEUE_SIZE;
-		
-		//
-		//	Create the memory that is used for the queue area
-		//
-		byte			_queue[ queue_size ];
-		
-		//
-		//	Define where the data in added and removed and
-		//	how many bytes are in the queue.
-		//
-		volatile byte		_in,
-					_out,
-					_content;
-
-		//
-		//	Declare the Signal we will be using to control
-		//	reading from the queue.
-		//
-		Signal			_gate;
-		
-	public:
-		//
-		//	Constructor only.
-		//	
-		Byte_Queue_Signal( void ) {
-			//
-			//	Queue indexes and length
-			//
-			_in = 0;
-			_out = 0;
-			_content = 0;
-		}
-		//
-		//	The Byte Queue API
-		//	==================
-		//
-		
-		virtual bool write( byte data ) {
-			Critical	code;
-
-			//
-			//	Is there space for the additional byte?
-			//
-			if( _content >= queue_size ) return( false );
-			//
-			//	There is sufficient space.
-			//
-			_queue[ _in++ ] = data;
-			if( _in >= queue_size ) _in = 0;
-			_content++;
-			//
-			//	Announce extra data.
-			//
-			_gate.release();
-			//
-			//	Done.
-			//
-			return( true );
-		}
-
-		virtual byte read( void ) {
-			Critical	code;
-			
-			if( _content ) {
-				byte	data;
-
-				//
-				//	There is data so get it.
-				//
-				data = _queue[ _out++ ];
-				if( _out >= queue_size ) _out = 0;
-				_content--;
-				//
-				//	Done.
-				//
-				return( data );
-			}
-			return( 0 );
-		}
-
-		//
-		//	Perform a "reset" of the underlying system.  This
-		//	is used only to recover from an unknown condition
-		//	with the expectation that upon return the queue
-		//	can be reliably used.
-		//
-		virtual void reset( void ) {
-			Critical code;
-			
-			//
-			//	Queue indexes and length
-			//
-			_in = 0;
-			_out = 0;
-			_content = 0;
-		}
-		virtual byte space( void ) {
-			return( queue_size - _content );
-		}
-
-		virtual byte available( void ) {
-			return( _content );
-		}
-
-		virtual byte pending( void ) {
-			return( _content );
-		}
-
-		//
-		//	For this version of the class we allow
-		//	access to the gate
-		//
-		Signal *control_signal( void ) {
-			return( &_gate );
-		}
-
-};
 
 #endif
 

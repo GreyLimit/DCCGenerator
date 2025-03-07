@@ -49,6 +49,7 @@ void Stats::process( UNUSED( byte handle )) {
 	//
 	_packets_sent.add( dcc_generator.packets_sent());
 	_free_buffers.add( dcc_generator.free_buffers());
+	_idle_cycles.add( task_manager.idle_count());
 
 #ifdef ENABLE_COUNT_INTERRUPTS
 	//
@@ -83,7 +84,7 @@ void Stats::process( UNUSED( byte handle )) {
 	//	Display task idle counter.
 	//
 	console.print( F( "STS idle count " ));
-	console.println( task_manager.idle_count());
+	console.println( _idle_cycles.first());
 #endif
 
 #ifdef ENABLE_HEAP_STATS
@@ -113,7 +114,7 @@ word Stats::packets_sent( void ) {
 //
 byte Stats::free_buffers( void ) {
 
-	STACK_TRACE( "word Stats::free_buffers( void )" );
+	STACK_TRACE( "byte Stats::free_buffers( void )" );
 
 	return( _free_buffers.last());
 }
@@ -127,6 +128,15 @@ byte Stats::free_buffers( void ) {
 	}
 #endif
 
+//
+//	Return the free buffers in the last time period.
+//
+word Stats::idle_cycles( void ) {
+
+	STACK_TRACE( "word Stats::idle_cycles( void )" );
+
+	return( _idle_cycles.last());
+}
 
 //
 //	The stats object.

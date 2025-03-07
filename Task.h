@@ -102,7 +102,7 @@ public:
 
 	//
 	//	This is the task scheduler interface (called from the
-	//	main loop continuously.
+	//	main loop continuously).
 	//
 	void run_tasks( void );
 
@@ -118,7 +118,7 @@ public:
 	bool add_task( Task_Entry *call, Signal *trigger, byte handle = 1 );
 	
 	//
-	//	Report (and reset) the idel counter for statistics purposes.
+	//	Report (and reset) the idle counter for statistics purposes.
 	//
 	word idle_count( void );
 };

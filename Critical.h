@@ -91,6 +91,18 @@ public:
 	~Critical() {
 		SREG = _sreg;
 	}
+
+	//
+	//	Provide a function enabling code executing inside
+	//	a Critical section the ability to query the mode
+	//	"outside" this section.
+	//
+	bool was_critical( void ) {
+		return( !BOOL( _sreg & global_interrupt_flag ));
+	}
+	bool was_normal( void ) {
+		return( !BOOL( _sreg & global_interrupt_flag ));
+	}
 	
 	//
 	//	Simple boolean functions return true if
@@ -118,55 +130,41 @@ public:
 	}
 };
 
-class Controlled {
+//
+//	Provide a limited ability for code to be executed in "normal"
+//	(ie interruptible) mode.
+//
+class Normal {
+public:
 private:
 	//
 	//	Somewhere to save a copy of the Status
 	//	Register
 	//
 	byte	_sreg;
-	
-	//
-	//	The address and previous content of the controll
-	//	flag.
-	//
-	bool	*_adrs,
-		_value;
 
 public:
 	//
 	//	Called when entering the block
 	//
-	Controlled( bool *flag ) {
-		//
-		//	Save flag details, previous value and
-		//	the status register.
-		//
-		_adrs = flag;
-		_value = *_adrs;
+	Normal( void ) {
 		_sreg = SREG;
-		//
-		//	Set flag then enable interrupts.
-		//
-		*_adrs = true;
 		SREG |= Critical::global_interrupt_flag;
 	}
+	
 	//
 	//	Called when leaving the block
 	//
-	~Controlled() {
-		//
-		//	Reset eveything back to original state.
+	~Normal() {
 		SREG = _sreg;
-		*_adrs = _value;
 	}
-};
 
+};
 
 
 #else
 
-#error "Define Class Critical/Controlled for your architecture."
+#error "Define Class Critical/Normal for your architecture."
 
 #endif
 

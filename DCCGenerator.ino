@@ -707,7 +707,7 @@ void setup( void ) {
 
 
 //
-//	Finally, the main event loop which is al about running the tasks.
+//	Finally, the main event loop which is all about running the tasks.
 //
 void loop( void ) {
 	

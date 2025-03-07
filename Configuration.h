@@ -21,12 +21,12 @@
 
 //
 //	Define, roughly, how big the memory foot print of the
-//	firmware is, exclusind the memory heap.
+//	firmware is, excluding the memory heap.
 //
 //	This is *absolutely* depenedent on the firmware
 //
 #if defined( __AVR_ATmega328__ )| defined( __AVR_ATmega328P__ )| defined( __AVR_ATmega328PB__ )
-#define STATIC_VARIABLES	750
+#define STATIC_VARIABLES	730
 #elif defined( __AVR_ATmega2560__ )
 #define STATIC_VARIABLES	1000
 #else

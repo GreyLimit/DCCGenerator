@@ -540,11 +540,12 @@ DCC::trans_buffer *DCC::acquire_buffer( word target, bool mobile, word action, b
 				found = look;
 				
 				//
-				//	Clear any pending records that may be attached.
-				//	
+				//	A duration implies that the pending records list should
+				//	be empty with the record in the run state.
 				//
-				found->pending = release_pending_recs( found->pending, false );
-
+				ASSERT( found->pending == NIL( pending_packet ));
+				ASSERT( found->state == state_run );
+				
 				break;
 			}
 		} 
@@ -625,7 +626,6 @@ bool DCC::extend_buffer( DCC::trans_buffer *rec, byte duration, byte preamble, b
 	pending_packet	*ptr;
 
 	ASSERT( rec != NIL( trans_buffer ));
-	ASSERT(( rec->state == state_empty )||( rec->state == state_run ));
 	ASSERT( cmd != NIL( byte ));
 	ASSERT( len > 0 );
 	ASSERT( len < maximum_command );
@@ -673,7 +673,6 @@ bool DCC::complete_buffer( DCC::trans_buffer *rec ) {
 	pending_packet	*ptr;
 
 	ASSERT( rec != NIL( trans_buffer ));
-	ASSERT(( rec->state == state_empty )||( rec->state == state_run ));
 
 	//
 	//	As a point here, if we are "completing" a
@@ -708,29 +707,49 @@ bool DCC::complete_buffer( DCC::trans_buffer *rec ) {
 	//	state of the record to one which the ISR will
 	//	respond to.
 	//
-	if( rec->state == state_run ) {
-		//
-		//	We need to get the ISR to pass this
-		//	record back to the manager to get the
-		//	bit pattern created and start transmission.
-		//
-		rec->state = state_reload;
-	}
-	else {
-		//
-		//	We need to get this record into the circular
-		//	queue.  The best way to do this is to add it
-		//	to the managers queue and signal it to do the
-		//	work.
-		//
-		rec->state = state_load;
-		{
-			Critical code;
-
-			rec->next = (trans_buffer *)_manage;
-			_manage = rec;
+	switch( rec->state ) {
+		case state_run: {
+			//
+			//	We need to get the ISR to pass this
+			//	record back to the manager to get the
+			//	bit pattern created and start transmission.
+			//
+			rec->state = state_reload;
+			break;
 		}
-		_manager.release();
+		case state_empty: {
+			//
+			//	We need to get this record into the circular
+			//	queue.  The best way to do this is to add it
+			//	to the managers queue and signal it to do the
+			//	work.
+			//
+			rec->state = state_load;
+			{
+				Critical code;
+
+				rec->next = (trans_buffer *)_manage;
+				_manage = rec;
+			}
+			_manager.release();
+			break;
+		}
+		case state_load:
+		case state_reload: {
+			//
+			//	This record is "between" states having already
+			//	asked to be reloaded.  We just let this one
+			//	play out.
+			//
+			break;
+		}
+		default: {
+			//
+			//	Only option not covered is state_fixed and that
+			//	should never see the light of day here.
+			//
+			ABORT( PROGRAMMER_ERROR_ABORT );
+		}
 	}
 	//
 	//	Report success.
@@ -1732,46 +1751,96 @@ bool DCC::state_command( word target, byte speed, byte dir, byte fn[ DCC_Constan
 }
 
 //
-//	The memory recovery API
-//	=======================
+//	The memory reclamation API.
+//	---------------------------
 //
-bool DCC::release_memory( void ) {
+
+//
+//	Return the number of bytes memory being "cached" and
+//	available for release if required.  This is a statistical
+//	call to allow tracking of memory usage.
+//
+size_t DCC::cache_memory( void ) {
 	
-	STACK_TRACE( "void DCC::release_memory( void )" );
+	STACK_TRACE( "size_t DCC::cache_memory( void )" );
 
-	bool	r = false;
+	word total = 0;
+	for( trans_buffer *look = _free_trans; look != NIL( trans_buffer ); look = look->next ) total += sizeof( trans_buffer );
+	for( pending_packet *look = _free_packets; look != NIL( pending_packet ); look = look->next ) total += sizeof( pending_packet );
+	return( total );
+}
 
-	//
-	//	Clear the list of unused buffer records.
-	//
+//
+//	Tell the object to clear all cached memory and release it
+//	to the heap.
+//
+bool DCC::clear_cache( void ) {
+	
+	STACK_TRACE( "bool DCC::clear_cache( void )" );
+
+	bool		r = false;
+
 	{
 		trans_buffer	*ptr;
-
 		while(( ptr = _free_trans )) {
 			_free_trans = ptr->next;
 			delete ptr;
-			_free_buffers--;
 			r = true;
 		}
-
-		ASSERT( _free_buffers == 0 );
 	}
-	//
-	//	Clear the list of unused pending packet records.
-	//
 	{
 		pending_packet	*ptr;
-
 		while(( ptr = _free_packets )) {
 			_free_packets = ptr->next;
 			delete ptr;
 			r = true;
 		}
 	}
-	//
-	//	Done.
-	//
 	return( r );
+}
+
+//
+//	Ask the object how much memory, as a single block, it
+//	would release to satisfy a specified allocation request.
+//	Return 0 if this object cannot satisfy the request.
+//
+size_t DCC::test_cache( size_t bytes ) {
+	
+	STACK_TRACE( "size_t DCC::test_cache( size_t bytes )" );
+
+	if( _free_packets &&( sizeof( pending_packet ) >= bytes )) return( sizeof( pending_packet ));
+	if( _free_trans &&( sizeof( trans_buffer ) >= bytes )) return( sizeof( trans_buffer ));
+	return( 0 );
+}
+
+//
+//	Request that an object release, as a single block,
+//	enough memory to cover the specified allocation.
+//	Return true on success, false on failure.
+//
+bool DCC::release_cache( size_t bytes ) {
+
+	STACK_TRACE( "bool DCC::release_cache( size_t bytes )" );
+
+	if( _free_packets &&( sizeof( pending_packet ) >= bytes )) {
+		pending_packet *ptr;
+
+		ptr = _free_packets;
+		_free_packets = ptr->next;
+		delete ptr;
+
+		return( true );
+	}
+	if( _free_trans &&( sizeof( trans_buffer ) >= bytes )) {
+		trans_buffer *ptr;
+
+		ptr = _free_trans;
+		_free_trans = ptr->next;
+		delete ptr;
+
+		return( true );
+	}
+	return( false );
 }
 
 //

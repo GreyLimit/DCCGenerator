@@ -13,7 +13,7 @@
 #include "Configuration.h"
 #include "Task_Entry.h"
 #include "Signal.h"
-#include "Byte_Queue.h"
+#include "Byte_Queue_API.h"
 
 //
 //	Define a list of Error numbers that this code could report
@@ -124,6 +124,11 @@
 #define DCC_DRIVER_CONFIGURATION_FULL	83
 
 //
+//	Dynamic queue errors.
+//
+#define QUEUE_ALLOCATION_FAILED		84
+
+//
 //	Error with signal range.
 //
 #define SIGNAL_RANGE_ERROR		87
@@ -207,9 +212,6 @@
 //	#define BIT_BUFFER_OVERFLOW_BREAK	0
 //	#define BIT_BUFFER_OVERFLOW_ONE		1
 //	#define BIT_BUFFER_OVERFLOW_ZERO	-1
-
-//
-//
 
 //
 //	Programming error abort.

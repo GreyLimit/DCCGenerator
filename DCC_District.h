@@ -17,6 +17,18 @@
 #endif
 
 //
+//	Declare the set of Zones which have specific meaning
+//	within the DCC generation and control modules.
+//
+enum DCC_Zones : byte {
+	Zone_Power_off		= 0,
+	Zone_Main_Track		= 1,
+	Zone_Programming_Track	= 2,
+	Zone_Test_Track		= 3
+};
+
+
+//
 //	This is the structure used to capture a district.
 //
 class DCC_District {

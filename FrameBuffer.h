@@ -17,6 +17,7 @@
 #include "LCD.h"
 #include "Signal.h"
 #include "Task_Entry.h"
+#include "Byte_Queue_API.h"
 
 #ifndef LCD_LOOKAHEAD_LIMIT
 #define LCD_LOOKAHEAD_LIMIT 10
@@ -25,7 +26,7 @@
 //
 //	Declare the frame buffer
 //
-class FrameBuffer : public Task_Entry {
+class FrameBuffer : public Task_Entry, Byte_Queue_API {
 private:
 	//
 	//	Set constants pertinent to the display we hare handling.
@@ -118,6 +119,18 @@ public:
 	void fill( char val, byte len );
 
 	virtual void process( byte handle );
+
+	//
+	//	Provide a set of IO routines that make the frame
+	//	buffer capable of operating as a (output only)
+	//	Byte_Queue via the Byte_Queue_API.
+	//
+	virtual bool write( byte data ) { write_char( (char)data ); return( true ); }
+	virtual byte read( void ) { return( EOS ); }
+	virtual byte space( void ) { return( 1 ); }
+	virtual byte available( void ) { return( 0 ); }
+	virtual byte pending( void ) { return( 0 ); }
+	virtual void reset( void ) { clear(); }
 };
 
 

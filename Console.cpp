@@ -38,6 +38,13 @@ Console	console;
 //	The call to initialise it.
 //
 void Console::initialise( byte dev, USART_line_speed speed ) {
+
+	//
+	//	Initialise the input queue and attach the
+	//	data _ready signal to it.
+	//
+	_in.initialise( &_ready );
+	_out.initialise( NIL( Signal ));
 	
 	//
 	//	Set up the serial connection.
@@ -57,7 +64,7 @@ Signal *Console::control_signal( void ) {
 #ifdef DEBUGGING_ENABLED
 	Signal *flag;
 
-	flag = _in.control_signal();
+	flag = &_ready;
 
 	TRACE_CONSOLE( console.print( F( "Console flag " )));
 	TRACE_CONSOLE( console.println( flag->identity()));
@@ -65,7 +72,7 @@ Signal *Console::control_signal( void ) {
 	return( flag );
 	
 #else
-	return( _in.control_signal());
+	return( &_ready );
 #endif
 }
  

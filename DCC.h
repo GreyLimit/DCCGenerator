@@ -976,10 +976,36 @@ public:
 	bool state_command( word target, byte speed, byte dir, byte fn[ DCC_Constant::bit_map_array ], Buffer_API *reply = NIL( Buffer_API ));
 
 	//
-	//	The memory recovery API
-	//	=======================
+	//	The memory reclamation API.
+	//	---------------------------
 	//
-	virtual bool release_memory( void );
+
+	//
+	//	Return the number of bytes memory being "cached" and
+	//	available for release if required.  This is a statistical
+	//	call to allow tracking of memory usage.
+	//
+	virtual size_t cache_memory( void );
+
+	//
+	//	Tell the object to clear all cached memory and release it
+	//	to the heap.
+	//
+	virtual bool clear_cache( void );
+
+	//
+	//	Ask the object how much memory, as a single block, it
+	//	would release to satisfy a specified allocation request.
+	//	Return 0 if this object cannot satisfy the request.
+	//
+	virtual size_t test_cache( size_t bytes );
+
+	//
+	//	Request that an object release, as a single block,
+	//	enough memory to cover the specified allocation.
+	//	Return true on success, false on failure.
+	//
+	virtual bool release_cache( size_t bytes );
 
 	//
 	//	Routines used to access statistical analysis

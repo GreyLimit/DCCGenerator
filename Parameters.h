@@ -11,7 +11,7 @@
 //	The headline configuration parameters.
 //
 #define VERSION_NAME		"DCC Gen"
-#define VERSION_NUMBER		"0.4.1"
+#define VERSION_NUMBER		"0.4.2"
 #define SERIAL_BAUD_RATE	B115200
 #define SERIAL_BAUD_RATE_STR	"115K"
 
@@ -60,7 +60,7 @@
 //				ensures the DCC signal is time accurate.
 //				In time this symbol will be removed.
 //
-//#define DISABLE_ASSERTIONS
+#define DISABLE_ASSERTIONS
 //#define ENABLE_COUNT_INTERRUPTS
 //#define ENABLE_DCC_DELAY_REPORT
 //#define ENABLE_IDLE_COUNT

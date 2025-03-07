@@ -54,9 +54,9 @@ void ADC_Manager::initialise( void ) {
 	STACK_TRACE( "void ADC_Manager::initialise( void )" );
 
 	//
-	//	Configure the ADC hardware to suit our use case.
+	//	There's nothing to do here that isn't done
+	//	when a conversion is requested.
 	//
-	
 }
 
 //
@@ -87,7 +87,7 @@ bool ADC_Manager::read( byte pin, Signal *flag, word *result ) {
 	}
 	else {
 		//
-		//	Try to mint a free new one.
+		//	Try to mint a new one.
 		//
 		if(!( ptr = new pending_adc )) return( false );
 	}
@@ -151,7 +151,7 @@ void ADC_Manager::process( UNUSED( byte handle )) {
 	if(( _active = ptr->next ) == NIL( pending_adc )) _tail = &_active;
 	
 	//
-	//	Save the reading and signal that new reading is ready.
+	//	Save the reading and signal that the data is ready.
 	//
 	//	This is fast signal as reading the load is a time
 	//	sensitive activity.
@@ -176,10 +176,81 @@ void ADC_Manager::process( UNUSED( byte handle )) {
 //
 void ADC_Manager::irq( word reading ) {
 	
-	STACK_TRACE( "void ADC_Manager::irq( void )" );
+	STACK_TRACE( "void ADC_Manager::irq( word reading )" );
 	
 	_reading = reading;
 	_irq.release( true );
+}
+
+//
+//	The memory reclamation API.
+//	---------------------------
+//
+//	Return the number of bytes memory being "cached" and
+//	available for release if required.  This is a statistical
+//	call to allow tracking of memory usage.
+//
+size_t ADC_Manager::cache_memory( void ) {
+	
+	STACK_TRACE( "size_t ADC_Manager::cache_memory( void )" );
+
+	word total = 0;
+	for( pending_adc *look = _free; look != NIL( pending_adc ); look = look->next ) total += sizeof( pending_adc );
+	return( total );
+}
+
+//
+//	Tell the object to clear all cached memory and release it
+//	to the heap.
+//
+bool ADC_Manager::clear_cache( void ) {
+	
+	STACK_TRACE( "bool ADC_Manager::clear_cache( void )" );
+
+	pending_adc	*ptr;
+	bool		r;
+
+	r = false;
+	while(( ptr = _free )) {
+		_free = ptr->next;
+		delete ptr;
+		r = true;
+	}
+	return( r );
+}
+
+//
+//	Ask the object how much memory, as a single block, it
+//	would release to satisfy a specified allocation request.
+//	Return 0 if this object cannot satisfy the request.
+//
+size_t ADC_Manager::test_cache( size_t bytes ) {
+	
+	STACK_TRACE( "size_t ADC_Manager::test_cache( size_t bytes )" );
+
+	if( _free &&( sizeof( pending_adc ) >= bytes )) return( sizeof( pending_adc ));
+	return( 0 );
+}
+
+//
+//	Request that an object release, as a single block,
+//	enough memory to cover the specified allocation.
+//	Return true on success, false on failure.
+//
+bool ADC_Manager::release_cache( size_t bytes ) {
+
+	STACK_TRACE( "bool ADC_Manager::release_cache( size_t bytes )" );
+
+	if( _free &&( sizeof( pending_adc ) >= bytes )) {
+		pending_adc *ptr;
+
+		ptr = _free;
+		_free = ptr->next;
+		delete ptr;
+
+		return( true );
+	}
+	return( false );
 }
 
 

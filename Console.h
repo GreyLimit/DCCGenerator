@@ -31,14 +31,16 @@
 #include "Byte_Queue.h"
 #include "USART.h"
 
-//
-//	Define the console buffer sizes, if not predefined elsewhere.
-//
-#ifndef CONSOLE_INPUT
-#define CONSOLE_INPUT	SELECT_SML(32,64,128)
-#endif
-#ifndef CONSOLE_OUTPUT
-#define CONSOLE_OUTPUT	SELECT_SML(32,64,128)
+#if 0
+			//
+			//	Define the console buffer sizes, if not predefined elsewhere.
+			//
+			#ifndef CONSOLE_INPUT
+			#define CONSOLE_INPUT	SELECT_SML(32,64,128)
+			#endif
+			#ifndef CONSOLE_OUTPUT
+			#define CONSOLE_OUTPUT	SELECT_SML(32,64,128)
+			#endif
 #endif
 
 //
@@ -47,10 +49,15 @@
 class Console : public USART_IO {
 private:
 	//
+	//	Signal used to flag data arriving.
+	//
+	Signal		_ready;
+	
+	//
 	//	Declare the IO buffers we will be using.
 	//
-	Byte_Queue_Signal< CONSOLE_INPUT >	_in;
-	Byte_Queue< CONSOLE_OUTPUT >		_out;
+	Byte_Queue	_in;
+	Byte_Queue	_out;
 	
 public:
 	//

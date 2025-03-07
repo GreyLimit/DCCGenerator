@@ -24,6 +24,28 @@
 #endif
 
 //
+//	Memory recovery routines.
+//
+//
+//	These routines provide the API for the Memory Heap code
+//	to manage the list and request a memory recovery run.
+//
+Memory_Recovery *Memory_Recovery::linkup( Memory_Recovery *list ) {
+
+	STACK_TRACE( "Memory_Recovery *Memory_Heap::linkup( Memory_Recovery *list )" );
+
+	//
+	//	Just insert ourselves into the front of the
+	//	list and return our own address.
+	//
+	_next = list;
+	return( this );
+}
+Memory_Recovery *Memory_Recovery::next( void ) {
+	return( _next );
+}
+
+//
 //	Allocation verification routine.
 //
 //	Returns true if the index is referencing a valid block,
@@ -146,6 +168,7 @@ void *Memory_Heap::alloc( size_t rqst ) {
 	storage_unit	rqd,
 			fnd,
 			sz;
+	byte		looped;
 
 	//
 	//	Space required is that for the allocation itself
@@ -153,6 +176,7 @@ void *Memory_Heap::alloc( size_t rqst ) {
 	//	to a number of "storage_unit" data items.
 	//
 	rqd = (( rqst + rounding ) / sizeof( storage_unit )) + 1;
+	looped = 0;
 	
 	//
 	//	Generally, do we consider this a valid request?
@@ -163,6 +187,11 @@ void *Memory_Heap::alloc( size_t rqst ) {
 	}
 	
 retry_alloc:
+	//
+	//	Count our looping through the code.
+	//
+	looped++;
+	
 	//
 	//	Can we find something already de-allocated?
 	//
@@ -217,7 +246,63 @@ retry_alloc:
 			//	lets try to release some memory and try again
 			//	if that is successful.
 			//
-			if( _recovery->request_recovery()) goto retry_alloc;
+			switch( looped ) {
+				case 1: {
+					Memory_Recovery	*ptr,
+							*best;
+					size_t		size,
+							test;
+
+					//
+					//	The first time we loop through here we are
+					//	looking for a best match elective de-allocation.
+					//
+					best = NIL( Memory_Recovery );
+					size = MAXIMUM_WORD;
+					for( ptr = _recovery; ptr != NIL( Memory_Recovery ); ptr = ptr->next()) {
+						if((( test = ptr->test_cache( rqst )))&&( test < size )) {
+							size = test;
+							best = ptr;
+						}
+					}
+					if( best ) {
+						best->release_cache( rqst );
+						goto retry_alloc;
+					}
+					
+					//
+					//	If we couldn't find a good match then we
+					//	simulate being on our second loop through
+					//	rather than waste time with another failed
+					//	search.
+					//
+					looped = 2;
+					FALL_THROUGH;
+				}
+				case 2: {
+					Memory_Recovery	*ptr;
+					bool		effect;
+					
+					//
+					//	The second time we go through here we ask
+					//	all objects to release all memory.
+					//
+					effect = false;
+					for( ptr = _recovery; ptr != NIL( Memory_Recovery ); ptr = ptr->next()) {
+						effect |= ptr->clear_cache();
+					}
+					if( effect ) goto retry_alloc;
+					
+					//
+					//	If we get here then there is nothing to do but
+					//	report out of memory.
+					//
+					break;
+				}
+				default: {
+					break;
+				}
+			}
 
 			//
 			//	No recovery successful, produce the error.
@@ -311,7 +396,7 @@ void Memory_Heap::erase( void ) {
 //	Return the amount of free space in the heap, though not
 //	necessarily the largest free space.
 //
-Memory_Heap::storage_unit Memory_Heap::free_memory( void ) {
+size_t Memory_Heap::free_memory( void ) {
 
 	STACK_TRACE( "Memory_Heap::storage_unit Memory_Heap::free_memory( void )" );
 
@@ -330,7 +415,7 @@ Memory_Heap::storage_unit Memory_Heap::free_memory( void ) {
 //	This routine will be slow, so do not include in any time
 //	critical activity or use with any real frequency.
 //
-Memory_Heap::storage_unit Memory_Heap::free_block( void ) {
+size_t Memory_Heap::free_block( void ) {
 
 	STACK_TRACE( "Memory_Heap::storage_unit Memory_Heap::free_block( void )" );
 
@@ -369,6 +454,22 @@ Memory_Heap::storage_unit Memory_Heap::free_block( void ) {
 	//	there is a managment value to allow for.
 	//
 	return(( best - 1 ) * sizeof( storage_unit ));
+}
+
+//
+//	Calculate the amount of memory being held "in cache" by
+//	objects in the system.
+//
+size_t Memory_Heap::cache_memory( void ) {
+	size_t	sum;
+	
+	//
+	//	This is not the simplest stat to request
+	//	as we need to ask all objects to answer it.
+	//
+	sum = 0;
+	for( Memory_Recovery *ptr = _recovery; ptr; ptr = ptr->next()) sum += ptr->cache_memory();
+	return( sum );
 }
 
 //
